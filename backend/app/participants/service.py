@@ -16,6 +16,7 @@ from app.models import (
     Participation,
     ParticipationAreaResult,
     ParticipationCourseResult,
+    ParticipationFeedback,
     ParticipationSelection,
     QuizVersion,
     School,
@@ -26,6 +27,8 @@ from app.participants.schemas import (
     AreaResult,
     CourseResult,
     CurrentQuiz,
+    Feedback,
+    FeedbackResult,
     ParticipationResult,
     ParticipationSession,
     PublicStatement,
@@ -215,6 +218,9 @@ def saved_result(session: Session, participant: Participation) -> ParticipationR
             )
             for c, r in course_rows
         ],
+        feedback=(
+            saved_feedback(session, participant) if participant.status == "completed" else None
+        ),
     )
 
 
@@ -263,3 +269,77 @@ def submit(session: Session, participant: Participation, statement_ids: list[UUI
     participant.submitted_at = session.scalar(select(func.clock_timestamp()))
     session.flush()
     return saved_result(session, participant)
+
+
+def saved_feedback(session: Session, participant: Participation) -> FeedbackResult:
+    feedback = session.get(ParticipationFeedback, participant.id)
+    if participant.status != "completed" or feedback is None:
+        raise HTTPException(503, "Não foi possível recuperar a confirmação. Procure a equipe.")
+    return FeedbackResult(
+        participation_id=participant.id,
+        status=participant.status,
+        completed_at=participant.completed_at,
+        agrees_with_result=feedback.agrees_with_result,
+        chosen_course_id=feedback.chosen_course_id,
+        destination=feedback.destination,
+        destination_instructions=feedback.destination_instructions,
+        answered_at=feedback.answered_at,
+    )
+
+
+def record_feedback(session: Session, participant: Participation, data: Feedback) -> FeedbackResult:
+    """Record a destination snapshot and complete under the participant's existing lock."""
+    if participant.status == "draft":
+        raise HTTPException(409, "Submeta as escolhas antes de confirmar o resultado.")
+    if participant.status == "completed":
+        previous = saved_feedback(session, participant)
+        if (
+            previous.agrees_with_result != data.agrees_with_result
+            or previous.chosen_course_id != data.chosen_course_id
+        ):
+            raise HTTPException(409, "O resultado já foi confirmado com outra resposta.")
+        return previous
+
+    if data.agrees_with_result:
+        row = session.execute(
+            select(Course, Area)
+            .join(Area, Area.id == Course.area_id)
+            .join(ParticipationCourseResult, ParticipationCourseResult.course_id == Course.id)
+            .where(
+                ParticipationCourseResult.participation_id == participant.id,
+                ParticipationCourseResult.is_recommended.is_(True),
+                Course.id == data.chosen_course_id,
+                Course.quiz_version_id == participant.quiz_version_id,
+            )
+        ).one_or_none()
+        if row is None:
+            raise HTTPException(422, "Escolha um dos cursos sugeridos para esta participação.")
+        course, area = row
+        # A course destination is an optional pair; otherwise use its area's exact
+        # published destination. Never guess a laboratory or mix the two pairs.
+        if course.destination is not None:
+            destination, instructions = course.destination, course.destination_instructions
+        else:
+            destination, instructions = area.destination, area.destination_instructions
+    else:
+        version = session.get(QuizVersion, participant.quiz_version_id)
+        destination, instructions = version.psychology_destination, version.psychology_instructions
+
+    now = session.scalar(select(func.clock_timestamp()))
+    session.add(
+        ParticipationFeedback(
+            participation_id=participant.id,
+            agrees_with_result=data.agrees_with_result,
+            chosen_course_id=data.chosen_course_id,
+            destination=destination,
+            destination_instructions=instructions,
+            answered_at=now,
+        )
+    )
+    # Feedback insertion requires 'submitted'; completion requires that feedback
+    # already exists. Flush explicitly in this order, within the same transaction.
+    session.flush()
+    participant.status = "completed"
+    participant.completed_at = now
+    session.flush()
+    return saved_feedback(session, participant)

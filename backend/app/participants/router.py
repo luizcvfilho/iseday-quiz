@@ -10,6 +10,8 @@ from app.models import School
 from app.participants import service
 from app.participants.schemas import (
     CurrentQuiz,
+    Feedback,
+    FeedbackResult,
     ParticipationResult,
     ParticipationSession,
     PublicSchool,
@@ -102,6 +104,18 @@ def result(request: Request, session: Database):
         return service.saved_result(
             session, service.authenticated_participation(session, access_token(request))
         )
+
+
+@router.post("/participations/me/feedback", response_model=FeedbackResult, dependencies=WRITE)
+def feedback(data: Feedback, request: Request, session: Database):
+    settings = request.app.state.settings
+    throttle(request, "feedback", settings.participant_submission_limit)
+    hashed = token_hash(access_token(request))
+    if hashed:
+        request.app.state.public_rate_limiter.check("participant_feedback", hashed, 30)
+    with session.begin():
+        participant = service.authenticated_participation(session, access_token(request))
+        return service.record_feedback(session, participant, data)
 
 
 @router.post("/participations/me/end", status_code=204, dependencies=WRITE)

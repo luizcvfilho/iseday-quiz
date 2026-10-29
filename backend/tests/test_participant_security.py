@@ -44,7 +44,13 @@ def test_token_is_hashed_and_distinct():
 
 
 @pytest.mark.parametrize(
-    "path", ["/participations", "/participations/me/submit", "/participations/me/end"]
+    "path",
+    [
+        "/participations",
+        "/participations/me/submit",
+        "/participations/me/feedback",
+        "/participations/me/end",
+    ],
 )
 def test_writes_require_custom_header_before_database_access(client, path):
     client, session = client

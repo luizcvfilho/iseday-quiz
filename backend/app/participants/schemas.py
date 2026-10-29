@@ -2,7 +2,16 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StrictBool,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=200)]
 
@@ -31,6 +40,21 @@ class Submission(BaseModel):
         if len(set(values)) != 25:
             raise ValueError("As 25 afirmativas devem ser únicas.")
         return values
+
+
+class Feedback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agrees_with_result: StrictBool
+    chosen_course_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def course_matches_agreement(self):
+        if self.agrees_with_result and self.chosen_course_id is None:
+            raise ValueError("Escolha um dos cursos sugeridos ao concordar com o resultado.")
+        if not self.agrees_with_result and self.chosen_course_id is not None:
+            raise ValueError("Não escolha um curso ao discordar do resultado.")
+        return self
 
 
 class PublicStatement(BaseModel):
@@ -78,6 +102,17 @@ class CourseResult(BaseModel):
     is_recommended: bool
 
 
+class FeedbackResult(BaseModel):
+    participation_id: UUID
+    status: Literal["completed"]
+    completed_at: datetime
+    agrees_with_result: bool
+    chosen_course_id: UUID | None
+    destination: str
+    destination_instructions: str
+    answered_at: datetime
+
+
 class ParticipationResult(BaseModel):
     participation_id: UUID
     quiz_version_id: UUID
@@ -86,3 +121,4 @@ class ParticipationResult(BaseModel):
     statement_ids: list[UUID]
     areas: list[AreaResult]
     courses: list[CourseResult]
+    feedback: FeedbackResult | None = None
