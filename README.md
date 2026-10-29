@@ -90,7 +90,7 @@ No Compose: `docker compose exec api uv run --no-sync alembic upgrade head`.
 
 A migração exige PostgreSQL e não importa conteúdo nem cria contas administrativas. Ela preserva versões publicadas, exige 25 escolhas únicas da mesma versão e resultados de todas as áreas/cursos na submissão, e bloqueia edições posteriores das respostas e resultados. O cadastro fica imutável após envio, com exceção dos campos necessários à sessão e à conclusão. O feedback só aceita um curso sugerido, quando há concordância. A exclusão da participação inteira remove seus dados dependentes; os registros de auditoria podem sobreviver à exclusão.
 
-O motor de cálculo está em `backend/app/scoring.py`. A integração com a API e as operações atômicas de submissão/feedback ainda serão implementadas. As triggers usam bloqueios da versão/participação para serializar alterações concorrentes. O catálogo pode ser arquivado sem impedir que participações já iniciadas terminem.
+O motor de cálculo está em `backend/app/scoring.py`, integrado à submissão atômica em `backend/app/participants/`. O feedback ainda será implementado. As triggers usam bloqueios da versão/participação para serializar alterações concorrentes. O catálogo pode ser arquivado sem impedir que participações já iniciadas submetam suas escolhas.
 
 Para futuras alterações, edite os modelos e gere uma nova revisão com `uv run --frozen alembic revision --autogenerate -m "descricao"`. Revise o código gerado: funções/triggers e algumas mudanças de constraints exigem migrações manuais. Não edite revisões já aplicadas. A reversão para `base` remove todas as tabelas do domínio e seus dados; use-a somente em banco descartável ou em procedimento de manutenção planejado.
 
@@ -107,7 +107,7 @@ scripts/              Setup, desenvolvimento e verificações
 compose.yaml          PostgreSQL, API e frontend em desenvolvimento
 ```
 
-As dependências de backend incluem validação de e-mail e Argon2 para a futura autenticação administrativa, além de openpyxl para a importação do catálogo. O fluxo do aluno e o login ainda não foram implementados.
+As dependências de backend incluem validação de e-mail, Argon2 para a futura autenticação administrativa e openpyxl para a importação do catálogo. A API do aluno já oferece cadastro, sessão, submissão e resultado; as telas, o feedback e o login administrativo ainda serão implementados.
 
 ## Catálogo do quiz
 
@@ -159,10 +159,51 @@ uv run --project backend --frozen pytest backend/tests/test_scoring.py
 
 Os testes cobrem limites, duplicatas, identificadores externos à versão, vínculos inválidos, pesos, empates, ausência de normalização e o catálogo original de 74 afirmativas. O motor implementa a regra proposta; sua aprovação institucional continua pendente.
 
+## API do participante
+
+As rotas ficam sob a mesma origem do frontend, usando o proxy `/api`. O cadastro exige uma versão publicada e escolas ativas já cadastradas no banco. O importador continua criando somente rascunhos: esta etapa não publica o catálogo nem cadastra escolas automaticamente.
+
+Configure `PRIVACY_NOTICE_VERSION` e `PRIVACY_NOTICE_TEXT` no `.env`. O exemplo fornecido é somente para desenvolvimento com dados fictícios; substitua-o pelo aviso institucional aprovado antes do uso real. Sem ambos, a consulta do quiz e novos cadastros retornam 503. A versão apresentada precisa ser enviada no cadastro; ela registra qual aviso foi exibido, sem representar consentimento por si só.
+
+| Método e rota | Comportamento |
+|---|---|
+| `GET /api/quiz/current` | Versão publicada, aviso e afirmativas ordenadas, sem vínculos ou pesos. |
+| `GET /api/schools?q=nome&limit=50` | Escolas ativas; busca por nome e limite de 1 a 100 registros. |
+| `POST /api/participations` | Cadastro validado, participação em rascunho e cookie temporário. |
+| `GET /api/participations/me` | Identificador, versão, estado e expiração da própria sessão, sem contatos. |
+| `POST /api/participations/me/submit` | Valida 25 escolhas, calcula e grava escolhas/resultados na mesma transação. |
+| `GET /api/participations/me/result` | Resultado persistido da própria participação, com todas as áreas/cursos e empates. |
+| `POST /api/participations/me/end` | Revoga a credencial e remove o cookie; preserva o registro e as respostas. |
+
+Todos os POSTs exigem o cabeçalho `X-Quiz-Request: 1`. A API recusa requisições com `Sec-Fetch-Site: cross-site` e não habilita CORS. Esse cabeçalho personalizado é a proteção de CSRF para a API de mesma origem; qualquer futura abertura de CORS precisa preservar essa proteção. Referência: [OWASP — cabeçalhos personalizados para APIs](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi).
+
+Exemplo do corpo do cadastro (substitua os UUIDs pelos valores de `/api/quiz/current` e `/api/schools`):
+
+```json
+{
+  "quiz_version_id": "00000000-0000-0000-0000-000000000001",
+  "school_id": "00000000-0000-0000-0000-000000000002",
+  "full_name": "Aluno de teste",
+  "phone": "+5511999999999",
+  "email": "aluno@example.org",
+  "privacy_notice_version": "development-v1"
+}
+```
+
+O cadastro retorna 201 com metadados da participação. O cookie é `HttpOnly`, `SameSite=Strict`, sem `Domain`, válido por 60 minutos por padrão (`PARTICIPANT_SESSION_MINUTES`, de 1 a 240). Em produção (`APP_ENV=production`), usa `Secure` e o nome `__Host-iseday_participant`; em desenvolvimento, `iseday_participant`. O token aleatório só aparece no cookie; o banco guarda seu SHA-256. Envie o cookie nas chamadas seguintes e nunca use o UUID como credencial.
+
+O envio recebe `{"statement_ids": ["uuid-1", "uuid-2", "..."]}`, com exatamente 25 UUIDs únicos da versão da participação. A API bloqueia a participação até o fim da transação. O mesmo conjunto de escolhas, em qualquer ordem, retorna o resultado salvo sem recalcular; outro conjunto após submissão retorna 409. Uma versão arquivada continua válida para quem já havia iniciado. Qualquer falha durante a gravação desfaz escolhas, pontuações e mudança de estado.
+
+Repetir um cadastro idêntico com o cookie válido retorna 200 e a mesma participação. Dados diferentes na mesma sessão retornam 409: encerre-a antes do próximo aluno. Sem cookie não há deduplicação automática por contato. Uma sessão ausente, expirada ou revogada recebe 401; resultado ainda não submetido recebe 409. O encerramento é idempotente e retorna 204 mesmo sem sessão válida. A resposta de resultado inclui escolhas, pontuações e indicadores, sem contatos, pesos ou percentuais.
+
+As respostas `/api/` usam `Cache-Control: no-store`; erros de validação omitem os valores enviados e falhas de banco retornam mensagem genérica. Há limites de cadastro e submissão por IP em janelas de 60 segundos, configuráveis por `PARTICIPANT_REGISTRATION_LIMIT` (60) e `PARTICIPANT_SUBMISSION_LIMIT` (120), mais 30 submissões por credencial por minuto. O excesso retorna 429 com `Retry-After`. O controle usa memória limitada por processo; implantações com múltiplos workers precisam de limite compartilhado no proxy. Configure proxies confiáveis no servidor antes de usar IPs encaminhados.
+
+Os testes PostgreSQL exercitam as rotas com banco real, rollback, isolamento de sessões, expiração, revogação, arquivo de versões e submissões concorrentes. Execute-os com `./scripts/check-db.sh` ou com `TEST_DATABASE_URL` apontando para um banco descartável cujo nome termine em `_test`.
+
 ## Próximas etapas
 
 1. Revisar o catálogo importável e validar conteúdo, metodologia e destinos com a instituição.
-2. Integrar o motor de cálculo à API e implementar o fluxo do aluno com persistência.
+2. Implementar o feedback/encaminhamento na API e as telas do fluxo do aluno.
 3. Implementar autenticação e consultas administrativas.
 
 Antes da publicação, validar o conteúdo e a metodologia do quiz.
