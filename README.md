@@ -90,7 +90,7 @@ No Compose: `docker compose exec api uv run --no-sync alembic upgrade head`.
 
 A migração exige PostgreSQL e não importa conteúdo nem cria contas administrativas. Ela preserva versões publicadas, exige 25 escolhas únicas da mesma versão e resultados de todas as áreas/cursos na submissão, e bloqueia edições posteriores das respostas e resultados. O cadastro fica imutável após envio, com exceção dos campos necessários à sessão e à conclusão. O feedback só aceita um curso sugerido, quando há concordância. A exclusão da participação inteira remove seus dados dependentes; os registros de auditoria podem sobreviver à exclusão.
 
-O cálculo correto das pontuações e as operações atômicas de submissão/feedback continuam sendo responsabilidade da futura API. As triggers usam bloqueios da versão/participação para serializar alterações concorrentes. O catálogo pode ser arquivado sem impedir que participações já iniciadas terminem.
+O motor de cálculo está em `backend/app/scoring.py`. A integração com a API e as operações atômicas de submissão/feedback ainda serão implementadas. As triggers usam bloqueios da versão/participação para serializar alterações concorrentes. O catálogo pode ser arquivado sem impedir que participações já iniciadas terminem.
 
 Para futuras alterações, edite os modelos e gere uma nova revisão com `uv run --frozen alembic revision --autogenerate -m "descricao"`. Revise o código gerado: funções/triggers e algumas mudanças de constraints exigem migrações manuais. Não edite revisões já aplicadas. A reversão para `base` remove todas as tabelas do domínio e seus dados; use-a somente em banco descartável ou em procedimento de manutenção planejado.
 
@@ -141,12 +141,28 @@ O comando grava **somente um rascunho**, em uma única transação. Repetir a me
 
 O importador exige o modelo das duas abas da planilha e rejeita fórmulas, números ou frases duplicados, cursos desconhecidos, vínculos repetidos e conteúdo incompleto. `--file /caminho/planilha.xlsx` permite validar uma revisão com a mesma estrutura; `--event "Nome do evento"` define o evento na importação.
 
-Antes de publicar, a instituição precisa validar os textos, a metodologia, os pesos e os destinos. As listas de espaços são referências por área, sem destinos específicos inventados para os cursos. Consulte [as pendências do catálogo](backend/catalog/README.md). O importador não publica versões.
+Antes de publicar, a instituição precisa validar os textos, a metodologia, os pesos e os destinos. As listas de espaços são referências por área, sem destinos específicos inventados para os cursos. Consulte as pendências em `backend/catalog/quiz-final.json`. O importador não publica versões.
+
+## Cálculo de afinidade
+
+`calculate_scores`, em `backend/app/scoring.py`, recebe um `ScoringCatalog` com o retrato de uma versão e exatamente 25 UUIDs de afirmativas únicas dessa versão. O chamador deve montar esse retrato com todas as áreas, cursos, afirmativas e pesos da versão vinculada à participação. O motor não acessa o banco nem publica conteúdo.
+
+O método `area_distinct_count_course_sum_v1` soma um ponto por área distinta em cada afirmativa e soma os pesos positivos dos vínculos para cada curso. Todas as áreas com a maior pontuação vencem; dentro de cada área vencedora, todos os cursos com a maior pontuação positiva são recomendados. Os pontos não são normalizados nem apresentados como percentuais.
+
+O resultado contém o identificador da versão e pontuações/indicadores de todas as áreas e cursos, inclusive os com zero. A ordem dos identificadores é estável e não desempata resultados. Escolhas inválidas geram `InvalidSelectionError`; catálogo inconsistente ou método desconhecido gera `ScoringConfigurationError`, sem produzir resultado parcial.
+
+Para executar somente os testes do cálculo, a partir da raiz:
+
+```bash
+uv run --project backend --frozen pytest backend/tests/test_scoring.py
+```
+
+Os testes cobrem limites, duplicatas, identificadores externos à versão, vínculos inválidos, pesos, empates, ausência de normalização e o catálogo original de 74 afirmativas. O motor implementa a regra proposta; sua aprovação institucional continua pendente.
 
 ## Próximas etapas
 
 1. Revisar o catálogo importável e validar conteúdo, metodologia e destinos com a instituição.
-2. Implementar o fluxo do aluno, cálculo com empates e persistência.
+2. Integrar o motor de cálculo à API e implementar o fluxo do aluno com persistência.
 3. Implementar autenticação e consultas administrativas.
 
 Antes da publicação, validar o conteúdo e a metodologia do quiz.

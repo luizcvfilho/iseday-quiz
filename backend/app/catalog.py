@@ -24,9 +24,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import get_settings
 from app.db import build_engine
 from app.models import Area, Course, QuizVersion, Statement, StatementCourseWeight
+from app.scoring import SCORING_METHOD
 
 DEFAULT_WORKBOOK = Path(__file__).resolve().parents[1] / "catalog" / "quiz-final.xlsx"
-SCORING_METHOD = "area_distinct_count_course_sum_v1"
 PSYCHOLOGY_DESTINATION = "SPA"
 PSYCHOLOGY_INSTRUCTIONS = "Procure a equipe de Psicologia no SPA."
 PENDING_INSTRUCTIONS = (
