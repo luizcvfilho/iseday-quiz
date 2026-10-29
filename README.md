@@ -56,22 +56,43 @@ O arquivo `.env` fica na raiz e não é versionado. `DATABASE_URL` configura a A
 ./scripts/check.sh
 ```
 
-Executa lint e build do frontend, lint e formatação Python e testes da API. Os testes usam configuração própria e substituem a conexão por um mock: não acessam o banco de desenvolvimento e não substituem testes de integração com PostgreSQL.
+Executa lint e build do frontend, lint e formatação Python e os testes. Os testes de saúde da API usam conexão simulada. Sem `TEST_DATABASE_URL`, os testes de integração PostgreSQL são marcados como ignorados.
+
+Para validar a migração e as regras de integridade em PostgreSQL 17 real:
+
+```bash
+./scripts/check-db.sh
+```
+
+O script cria um container temporário, com porta local aleatória e dados em memória, e o remove ao terminar. Não usa o banco nem o volume do Compose. Verifica criação, reversão e reaplicação da migração, correspondência com os modelos, restrições, histórico e concorrência.
+
+Também é possível usar um servidor de teste existente:
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://usuario:senha@localhost:5432/iseday_test ./scripts/check-db.sh
+```
+
+O nome do banco deve terminar em `_test`. Os testes criam e removem apenas esquemas aleatórios próprios; o usuário precisa de permissão para criar esquemas. `REQUIRE_POSTGRES_TESTS=1` faz a ausência de `TEST_DATABASE_URL` falhar em vez de ignorar os testes, para uso em CI.
 
 ## Banco e migrações
 
-SQLAlchemy e Alembic estão configurados, com sessões por requisição e verificação real de conexão via `SELECT 1`. As tabelas do domínio e a migração inicial ainda serão implementadas. Não use `create_all` nem scripts de inicialização paralelos às migrações.
+Os 14 modelos do domínio estão em `backend/app/models.py`. A revisão `0001` cria tabelas, índices, constraints e triggers. As regras SQL dessa revisão ficam em `backend/migrations/versions/0001_integrity.sql`, carregadas pela migração; ambos os arquivos devem ser distribuídos juntos. Não use `create_all` nem execute `docs/database-schema.sql`: esse arquivo é a proposta original, não uma migração.
 
-Depois de implementar e importar os modelos em `backend/migrations/env.py`:
+Para preparar um banco vazio ou atualizar o banco local:
 
 ```bash
 cd backend
-uv run --frozen alembic revision --autogenerate -m "initial schema"
-# Revisar o arquivo gerado antes de aplicar, incluindo constraints e triggers.
 uv run --frozen alembic upgrade head
+uv run --frozen alembic current
 ```
 
-No Compose, quando as revisões existirem: `docker compose exec api uv run --no-sync alembic upgrade head`.
+No Compose: `docker compose exec api uv run --no-sync alembic upgrade head`.
+
+A migração exige PostgreSQL e não importa conteúdo nem cria contas administrativas. Ela preserva versões publicadas, exige 25 escolhas únicas da mesma versão e resultados de todas as áreas/cursos na submissão, e bloqueia edições posteriores das respostas e resultados. O cadastro fica imutável após envio, com exceção dos campos necessários à sessão e à conclusão. O feedback só aceita um curso sugerido, quando há concordância. A exclusão da participação inteira remove seus dados dependentes; os registros de auditoria podem sobreviver à exclusão.
+
+O cálculo correto das pontuações e as operações atômicas de submissão/feedback continuam sendo responsabilidade da futura API. As triggers usam bloqueios da versão/participação para serializar alterações concorrentes. O catálogo pode ser arquivado sem impedir que participações já iniciadas terminem.
+
+Para futuras alterações, edite os modelos e gere uma nova revisão com `uv run --frozen alembic revision --autogenerate -m "descricao"`. Revise o código gerado: funções/triggers e algumas mudanças de constraints exigem migrações manuais. Não edite revisões já aplicadas. A reversão para `base` remove todas as tabelas do domínio e seus dados; use-a somente em banco descartável ou em procedimento de manutenção planejado.
 
 `docker compose down` encerra os serviços e preserva os dados. O volume `postgres_data` guarda o PostgreSQL. As variáveis `POSTGRES_*` inicializam apenas um volume vazio: alterar o `.env` não troca as credenciais de um banco já criado.
 
@@ -80,8 +101,8 @@ No Compose, quando as revisões existirem: `docker compose exec api uv run --no-
 ```text
 frontend/             React, TypeScript, Vite e React Router
 backend/app/          FastAPI, configuração e conexão SQLAlchemy/Psycopg
-backend/migrations/   Ambiente Alembic para futuras migrações
-backend/tests/        Testes isolados da API
+backend/migrations/   Migrações Alembic e regras de integridade versionadas
+backend/tests/        Testes da API e integração PostgreSQL em postgres/
 scripts/              Setup, desenvolvimento e verificações
 compose.yaml          PostgreSQL, API e frontend em desenvolvimento
 ```
@@ -90,10 +111,9 @@ As dependências de backend incluem validação de e-mail e Argon2 para a futura
 
 ## Próximas etapas
 
-1. Implementar modelos e migração inicial a partir do esquema revisado.
-2. Importar e validar o catálogo de afirmativas, cursos e áreas.
-3. Implementar o fluxo do aluno, cálculo com empates e persistência.
-4. Implementar autenticação e consultas administrativas.
+1. Importar e validar o catálogo de afirmativas, cursos e áreas.
+2. Implementar o fluxo do aluno, cálculo com empates e persistência.
+3. Implementar autenticação e consultas administrativas.
 
 Antes da publicação, validar o conteúdo e a metodologia do quiz.
 
