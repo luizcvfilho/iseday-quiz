@@ -1,0 +1,740 @@
+{
+  "source_file": "QUIZ FINAL.xlsx",
+  "source_sha256": "9fb2fca9d7ebda3c8a42bf9ce46d0c5299fdd11384a1f6426a7a15e99b6adb50",
+  "areas": [
+    {
+      "name": "Arquitetura",
+      "destination": "Ateliês de projeto, Escritório Modelo e Burle Marx"
+    },
+    {
+      "name": "Educação",
+      "destination": "Escola CENSA e Laboratório de psicopedagogia"
+    },
+    {
+      "name": "Engenharia",
+      "destination": "Laboratório de práticas tecnológicas e engenharia"
+    },
+    {
+      "name": "Negócios",
+      "destination": "Coworking e Núcleo de Práticas Jurídicas"
+    },
+    {
+      "name": "Saúde",
+      "destination": "CEMA, SPA, Anatômico e complexo esportivo"
+    }
+  ],
+  "courses": [
+    {
+      "name": "Administração",
+      "area": "Negócios"
+    },
+    {
+      "name": "Arquitetura e Urbanismo",
+      "area": "Arquitetura"
+    },
+    {
+      "name": "Direito",
+      "area": "Negócios"
+    },
+    {
+      "name": "Educação Física",
+      "area": "Saúde"
+    },
+    {
+      "name": "Enfermagem",
+      "area": "Saúde"
+    },
+    {
+      "name": "Engenharia Civil",
+      "area": "Engenharia"
+    },
+    {
+      "name": "Engenharia Mecânica",
+      "area": "Engenharia"
+    },
+    {
+      "name": "Engenharia de Produção",
+      "area": "Engenharia"
+    },
+    {
+      "name": "Fisioterapia",
+      "area": "Saúde"
+    },
+    {
+      "name": "Pedagogia",
+      "area": "Educação"
+    },
+    {
+      "name": "Psicologia",
+      "area": "Saúde"
+    }
+  ],
+  "statements": [
+    {
+      "source_number": 1,
+      "display_order": 1,
+      "text": "Estar no controle (liderar)",
+      "courses": [
+        "Administração",
+        "Engenharia de Produção"
+      ]
+    },
+    {
+      "source_number": 2,
+      "display_order": 2,
+      "text": "Correr riscos",
+      "courses": [
+        "Administração"
+      ]
+    },
+    {
+      "source_number": 3,
+      "display_order": 3,
+      "text": "Preocupar-se com os outros",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 4,
+      "display_order": 4,
+      "text": "Ser aceito",
+      "courses": [
+        "Pedagogia"
+      ]
+    },
+    {
+      "source_number": 5,
+      "display_order": 5,
+      "text": "Ajudar",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 6,
+      "display_order": 6,
+      "text": "Usar a lógica",
+      "courses": [
+        "Engenharia Civil",
+        "Engenharia Mecânica"
+      ]
+    },
+    {
+      "source_number": 7,
+      "display_order": 7,
+      "text": "Demonstrar carinho e afeto",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 8,
+      "display_order": 8,
+      "text": "Criticar pessoas/analisar argumentos",
+      "courses": [
+        "Direito"
+      ]
+    },
+    {
+      "source_number": 9,
+      "display_order": 9,
+      "text": "Representar, dramatizar",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 10,
+      "display_order": 10,
+      "text": "Assumir responsabilidades pelos outros",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 11,
+      "display_order": 11,
+      "text": "Praticar atividades físicas",
+      "courses": [
+        "Educação Física"
+      ]
+    },
+    {
+      "source_number": 12,
+      "display_order": 12,
+      "text": "Trocar ideias, discutir algum assunto",
+      "courses": [
+        "Direito"
+      ]
+    },
+    {
+      "source_number": 13,
+      "display_order": 13,
+      "text": "Superar obstáculos",
+      "courses": [
+        "Educação Física"
+      ]
+    },
+    {
+      "source_number": 14,
+      "display_order": 14,
+      "text": "Apoiar os outros",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 15,
+      "display_order": 15,
+      "text": "Ser determinado",
+      "courses": [
+        "Educação Física"
+      ]
+    },
+    {
+      "source_number": 16,
+      "display_order": 16,
+      "text": "cuidar da aparência",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 17,
+      "display_order": 17,
+      "text": "Estar em companhia de outras pessoas",
+      "courses": [
+        "Pedagogia"
+      ]
+    },
+    {
+      "source_number": 18,
+      "display_order": 18,
+      "text": "Valorizar a justiça",
+      "courses": [
+        "Direito"
+      ]
+    },
+    {
+      "source_number": 19,
+      "display_order": 19,
+      "text": "Ser generoso",
+      "courses": [
+        "Pedagogia"
+      ]
+    },
+    {
+      "source_number": 20,
+      "display_order": 20,
+      "text": "Colecionar",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 21,
+      "display_order": 21,
+      "text": "Experimentar",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 22,
+      "display_order": 22,
+      "text": "Consolar as pessoas",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 23,
+      "display_order": 23,
+      "text": "Auxiliar pessoas",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 24,
+      "display_order": 24,
+      "text": "Fazer coisas detalhadamente com método",
+      "courses": [
+        "Engenharia de Produção"
+      ]
+    },
+    {
+      "source_number": 25,
+      "display_order": 25,
+      "text": "Participar de ou organizar festas",
+      "courses": [
+        "Pedagogia"
+      ]
+    },
+    {
+      "source_number": 26,
+      "display_order": 26,
+      "text": "Manter as coisas em ordem",
+      "courses": [
+        "Engenharia de Produção"
+      ]
+    },
+    {
+      "source_number": 27,
+      "display_order": 27,
+      "text": "Mudar a rotina",
+      "courses": [
+        "Educação Física"
+      ]
+    },
+    {
+      "source_number": 28,
+      "display_order": 28,
+      "text": "Ser prático e realista",
+      "courses": [
+        "Engenharia Civil",
+        "Engenharia Mecânica"
+      ]
+    },
+    {
+      "source_number": 29,
+      "display_order": 29,
+      "text": "Colcar a \"mão na massa\"",
+      "courses": [
+        "Engenharia Civil",
+        "Engenharia Mecânica"
+      ]
+    },
+    {
+      "source_number": 30,
+      "display_order": 30,
+      "text": "Inventar coisas",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 31,
+      "display_order": 31,
+      "text": "Ter disciplina",
+      "courses": [
+        "Engenharia de Produção"
+      ]
+    },
+    {
+      "source_number": 32,
+      "display_order": 32,
+      "text": "Tomar decisões rápidas",
+      "courses": [
+        "Engenharia de Produção"
+      ]
+    },
+    {
+      "source_number": 33,
+      "display_order": 33,
+      "text": "Ouvir",
+      "courses": [
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 34,
+      "display_order": 34,
+      "text": "Usar a instuição",
+      "courses": [
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 35,
+      "display_order": 35,
+      "text": "Ser compreensivo",
+      "courses": [
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 36,
+      "display_order": 36,
+      "text": "Estar bem informado",
+      "courses": [
+        "Direito"
+      ]
+    },
+    {
+      "source_number": 37,
+      "display_order": 37,
+      "text": "Falar em público",
+      "courses": [
+        "Administração"
+      ]
+    },
+    {
+      "source_number": 38,
+      "display_order": 38,
+      "text": "Fazer contatos",
+      "courses": [
+        "Administração"
+      ]
+    },
+    {
+      "source_number": 39,
+      "display_order": 39,
+      "text": "Seguir rotinas",
+      "courses": [
+        "Engenharia de Produção"
+      ]
+    },
+    {
+      "source_number": 40,
+      "display_order": 40,
+      "text": "Ter bom gosto",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 41,
+      "display_order": 41,
+      "text": "Manter proximidade corporal com as pessoas",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 42,
+      "display_order": 42,
+      "text": "Usar a imaginação",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 43,
+      "display_order": 43,
+      "text": "Encontrar soluções novas",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 44,
+      "display_order": 44,
+      "text": "Atender às necessidades dos outros",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 45,
+      "display_order": 45,
+      "text": "Ser receptivo às pessoas",
+      "courses": [
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 46,
+      "display_order": 46,
+      "text": "Tomar iniciativas",
+      "courses": [
+        "Administração"
+      ]
+    },
+    {
+      "source_number": 47,
+      "display_order": 47,
+      "text": "Manter o bom humor",
+      "courses": [
+        "Pedagogia"
+      ]
+    },
+    {
+      "source_number": 48,
+      "display_order": 48,
+      "text": "Ser sensível",
+      "courses": [
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 49,
+      "display_order": 49,
+      "text": "Analisar",
+      "courses": [
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 50,
+      "display_order": 50,
+      "text": "Ser fisicamente ágil",
+      "courses": [
+        "Educação Física"
+      ]
+    },
+    {
+      "source_number": 51,
+      "display_order": 51,
+      "text": "Fazer parte de um grupo",
+      "courses": [
+        "Administração"
+      ]
+    },
+    {
+      "source_number": 52,
+      "display_order": 52,
+      "text": "Resolver problemas",
+      "courses": [
+        "Engenharia Civil",
+        "Engenharia Mecânica"
+      ]
+    },
+    {
+      "source_number": 53,
+      "display_order": 53,
+      "text": "Usar equipamentos, novas tecnologias",
+      "courses": [
+        "Engenharia Civil",
+        "Engenharia Mecânica"
+      ]
+    },
+    {
+      "source_number": 54,
+      "display_order": 54,
+      "text": "Conversar",
+      "courses": [
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 55,
+      "display_order": 55,
+      "text": "Competir",
+      "courses": [
+        "Educação Física"
+      ]
+    },
+    {
+      "source_number": 56,
+      "display_order": 56,
+      "text": "Ser notado",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 57,
+      "display_order": 57,
+      "text": "Economizar",
+      "courses": [
+        "Administração"
+      ]
+    },
+    {
+      "source_number": 58,
+      "display_order": 58,
+      "text": "Trabalhar com coisas concretas",
+      "courses": [
+        "Engenharia Civil",
+        "Engenharia Mecânica"
+      ]
+    },
+    {
+      "source_number": 59,
+      "display_order": 59,
+      "text": "Fazer as coisas do seu jeito",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 60,
+      "display_order": 60,
+      "text": "Se aprofundar naquilo que faz",
+      "courses": [
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 61,
+      "display_order": 61,
+      "text": "Aconselhar e orientar pessoas",
+      "courses": [
+        "Pedagogia",
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 62,
+      "display_order": 62,
+      "text": "Trabalhar de acordo com planos",
+      "courses": [
+        "Engenharia de Produção"
+      ]
+    },
+    {
+      "source_number": 63,
+      "display_order": 63,
+      "text": "Produzir efeitos impressionantes",
+      "courses": [
+        "Arquitetura e Urbanismo"
+      ]
+    },
+    {
+      "source_number": 64,
+      "display_order": 64,
+      "text": "Ter interesse por ou seguir tradições",
+      "courses": [
+        "Direito"
+      ]
+    },
+    {
+      "source_number": 65,
+      "display_order": 65,
+      "text": "Mediar situações para resolver problemas",
+      "courses": [
+        "Direito",
+        "Psicologia"
+      ]
+    },
+    {
+      "source_number": 66,
+      "display_order": 66,
+      "text": "Ler",
+      "courses": [
+        "Direito"
+      ]
+    },
+    {
+      "source_number": 67,
+      "display_order": 67,
+      "text": "Estabelecer objetivos",
+      "courses": [
+        "Engenharia de Produção"
+      ]
+    },
+    {
+      "source_number": 68,
+      "display_order": 68,
+      "text": "Ser brincalhão",
+      "courses": [
+        "Pedagogia"
+      ]
+    },
+    {
+      "source_number": 69,
+      "display_order": 69,
+      "text": "Ter ousadia",
+      "courses": [
+        "Administração"
+      ]
+    },
+    {
+      "source_number": 70,
+      "display_order": 70,
+      "text": "Ligado à construção",
+      "courses": [
+        "Arquitetura e Urbanismo",
+        "Engenharia Civil",
+        "Engenharia Mecânica"
+      ]
+    },
+    {
+      "source_number": 71,
+      "display_order": 71,
+      "text": "Usar traje formal",
+      "courses": [
+        "Direito"
+      ]
+    },
+    {
+      "source_number": 72,
+      "display_order": 72,
+      "text": "Manipular substâncias",
+      "courses": [
+        "Enfermagem",
+        "Fisioterapia"
+      ]
+    },
+    {
+      "source_number": 73,
+      "display_order": 73,
+      "text": "Ter contato com a natureza",
+      "courses": [
+        "Educação Física"
+      ]
+    },
+    {
+      "source_number": 74,
+      "display_order": 74,
+      "text": "Organizar o próprio horário/livre",
+      "courses": [
+        "Educação Física"
+      ]
+    }
+  ],
+  "status": "draft",
+  "scoring_method": "area_distinct_count_course_sum_v1",
+  "weight_per_link": 1,
+  "required_selection_count": 25,
+  "psychology_destination": "SPA",
+  "psychology_instructions": "Procure a equipe de Psicologia no SPA.",
+  "area_destination_instructions": "Referência da planilha por área; confirmar localização e encaminhamento com a instituição.",
+  "counts": {
+    "statements": 74,
+    "courses": 11,
+    "areas": 5,
+    "links": 96
+  },
+  "area_coverage": {
+    "Arquitetura": 11,
+    "Educação": 7,
+    "Engenharia": 15,
+    "Negócios": 16,
+    "Saúde": 29
+  },
+  "course_coverage": {
+    "Administração": 8,
+    "Arquitetura e Urbanismo": 11,
+    "Direito": 8,
+    "Educação Física": 8,
+    "Enfermagem": 11,
+    "Engenharia Civil": 7,
+    "Engenharia Mecânica": 7,
+    "Engenharia de Produção": 8,
+    "Fisioterapia": 11,
+    "Pedagogia": 7,
+    "Psicologia": 10
+  },
+  "identical_course_mappings": [
+    [
+      "Enfermagem",
+      "Fisioterapia"
+    ],
+    [
+      "Engenharia Civil",
+      "Engenharia Mecânica"
+    ]
+  ],
+  "review_notes": [
+    "Rascunho: catálogo, textos, metodologia, pesos e destinos aguardam validação institucional.",
+    "A planilha contém 74 afirmativas; o PDF menciona 82. As fontes não foram mescladas.",
+    "Textos preservados: revisar especialmente 29 (Colcar) e 34 (instuição).",
+    "Peso proposto: 1 por vínculo; área conta uma vez por frase; sem normalização automática.",
+    "Cobertura desigual entre áreas; a soma bruta pode favorecer áreas com mais afirmativas.",
+    "Destinos são listas por área; confirmar correspondência por curso e localização.",
+    "Confirmar a divergência da localização do Escritório Modelo entre planilha e PDF."
+  ]
+}

@@ -107,11 +107,45 @@ scripts/              Setup, desenvolvimento e verificações
 compose.yaml          PostgreSQL, API e frontend em desenvolvimento
 ```
 
-As dependências de backend incluem validação de e-mail e Argon2 para a futura autenticação administrativa. O quiz, a importação do catálogo e o login ainda não foram implementados.
+As dependências de backend incluem validação de e-mail e Argon2 para a futura autenticação administrativa, além de openpyxl para a importação do catálogo. O fluxo do aluno e o login ainda não foram implementados.
+
+## Catálogo do quiz
+
+A cópia original da planilha está em `backend/catalog/quiz-final.xlsx`. O catálogo normalizado, o SHA-256 da fonte e as pendências de revisão estão em `backend/catalog/quiz-final.json`: **74 afirmativas, 11 cursos, 5 áreas e 96 vínculos**, com peso proposto de 1 por vínculo. Os textos originais são preservados, inclusive possíveis erros de digitação.
+
+Valide sem precisar de banco (comandos a partir da raiz):
+
+```bash
+cd backend
+uv run --frozen python -m app.catalog validate
+# Opcional: regenerar o relatório de revisão versionado.
+uv run --frozen python -m app.catalog validate --report catalog/quiz-final.json
+```
+
+Depois de aplicar as migrações, importe no banco configurado em `DATABASE_URL` (ainda em `backend/`):
+
+```bash
+uv run --frozen alembic upgrade head
+uv run --frozen python -m app.catalog import --version 1
+```
+
+No Compose, após reconstruir a imagem da API com as novas dependências:
+
+```bash
+docker compose up -d --build api
+docker compose exec api uv run --no-sync alembic upgrade head
+docker compose exec api uv run --no-sync python -m app.catalog import --version 1
+```
+
+O comando grava **somente um rascunho**, em uma única transação. Repetir a mesma importação para a mesma versão retorna o registro existente; conteúdo diferente é rejeitado sem sobrescrever dados. Use outro número de versão para uma revisão. Importações concorrentes são serializadas. Versões publicadas ou arquivadas nunca são alteradas ou republicadas pelo importador.
+
+O importador exige o modelo das duas abas da planilha e rejeita fórmulas, números ou frases duplicados, cursos desconhecidos, vínculos repetidos e conteúdo incompleto. `--file /caminho/planilha.xlsx` permite validar uma revisão com a mesma estrutura; `--event "Nome do evento"` define o evento na importação.
+
+Antes de publicar, a instituição precisa validar os textos, a metodologia, os pesos e os destinos. As listas de espaços são referências por área, sem destinos específicos inventados para os cursos. Consulte [as pendências do catálogo](backend/catalog/README.md). O importador não publica versões.
 
 ## Próximas etapas
 
-1. Importar e validar o catálogo de afirmativas, cursos e áreas.
+1. Revisar o catálogo importável e validar conteúdo, metodologia e destinos com a instituição.
 2. Implementar o fluxo do aluno, cálculo com empates e persistência.
 3. Implementar autenticação e consultas administrativas.
 
