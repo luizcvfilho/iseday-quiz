@@ -1,0 +1,29 @@
+[project]
+name = "iseday-api"
+version = "0.1.0"
+description = "API do quiz ISE Day"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34,<1",
+    "pydantic-settings>=2.8,<3",
+    "email-validator>=2.2,<3",
+    "sqlalchemy>=2.0,<2.1",
+    "psycopg[binary]>=3.2,<4",
+    "alembic>=1.15,<2",
+    "pwdlib[argon2]>=0.2,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "httpx2>=2.16,<3", "ruff>=0.11,<1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
