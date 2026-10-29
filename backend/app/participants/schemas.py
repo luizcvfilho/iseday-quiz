@@ -63,14 +63,17 @@ class PublicStatement(BaseModel):
     text: str
 
 
-class CurrentQuiz(BaseModel):
+class QuizContent(BaseModel):
     id: UUID
     version_number: int
     event_name: str
     required_selection_count: int
+    statements: list[PublicStatement]
+
+
+class CurrentQuiz(QuizContent):
     privacy_notice_version: str
     privacy_notice_text: str
-    statements: list[PublicStatement]
 
 
 class PublicSchool(BaseModel):

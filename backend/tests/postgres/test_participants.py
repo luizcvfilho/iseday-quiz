@@ -323,12 +323,20 @@ def test_expiry_revocation_and_idempotent_end_preserve_history(api):
 
 
 def test_existing_participation_can_submit_after_version_archival(api):
+    assert api.client.get("/api/participations/me/quiz").status_code == 401
     register(api)
     with api.engine.begin() as db:
         db.execute(
             update(QuizVersion).where(QuizVersion.id == api.quiz.version).values(status="archived")
         )
         catalog(db, number=2)
+    original = api.client.get("/api/participations/me/quiz")
+    assert original.status_code == 200
+    assert original.json()["id"] == str(api.quiz.version)
+    assert {s["id"] for s in original.json()["statements"]} == {str(s) for s in api.quiz.statements}
+    assert "privacy_notice_text" not in original.json()
+    assert "weight" not in original.text
+    assert original.headers["cache-control"] == "no-store"
     assert submit(api).status_code == 200
     assert api.client.get("/api/participations/me/result").json()["quiz_version_id"] == str(
         api.quiz.version

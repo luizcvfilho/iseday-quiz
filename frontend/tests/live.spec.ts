@@ -1,0 +1,35 @@
+import { test, expect } from '@playwright/test'
+
+test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reais', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/')
+  await expect(page.getByLabel('Nome completo')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await page.screenshot({ path: testInfo.outputPath('cadastro-desktop.png'), fullPage: true })
+  await page.getByLabel('Nome completo').fill('Aluno fictício para teste')
+  await page.getByRole('combobox', { name: /^Escola/ }).fill('Escola de teste')
+  await page.getByRole('option', { name: 'Escola de teste (fictícia)', exact: true }).click()
+  await page.getByLabel('Telefone com DDD').fill('(11) 99999-9999')
+  await page.getByRole('textbox', { name: /^E-mail/ }).fill('teste@example.org')
+  await page.getByRole('button', { name: 'Começar meu quiz' }).click()
+  await expect(page.getByRole('checkbox')).toHaveCount(74)
+  await page.screenshot({ path: testInfo.outputPath('afirmativas-desktop.png'), fullPage: true })
+  for (let i = 0; i < 25; i++) await page.getByRole('checkbox').nth(i).check()
+  await page.getByRole('button', { name: 'Revisar escolhas' }).click()
+  await page.getByRole('button', { name: 'Confirmar 25 escolhas' }).click()
+  await expect(page.getByRole('heading', { name: 'Saúde', exact: true })).toBeVisible()
+  await expect(page.getByText('Enfermagem', { exact: true })).toBeVisible()
+  await expect(page.getByText('Fisioterapia', { exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('resultado-desktop.png'), fullPage: true })
+  await page.getByRole('radio', { name: 'Sim, faz sentido' }).check()
+  await page
+    .getByLabel('Qual curso você quer conhecer?')
+    .selectOption({ label: 'Enfermagem · Saúde' })
+  await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
+  await expect(page.getByRole('heading', { name: 'Vamos conhecer de perto?' })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('encaminhamento-desktop.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Encerrar e liberar dispositivo' }).click()
+  await expect(page.getByLabel('Nome completo')).toHaveValue('')
+  expect((await page.request.get('/api/participations/me')).status()).toBe(401)
+})

@@ -107,7 +107,45 @@ scripts/              Setup, desenvolvimento e verificações
 compose.yaml          PostgreSQL, API e frontend em desenvolvimento
 ```
 
-As dependências de backend incluem validação de e-mail, Argon2 para a futura autenticação administrativa e openpyxl para a importação do catálogo. A API do aluno já oferece cadastro, sessão, submissão, resultado, confirmação e encaminhamento; as telas e o login administrativo ainda serão implementados.
+As dependências de backend incluem validação de e-mail, Argon2 para a futura autenticação administrativa e openpyxl para a importação do catálogo. O fluxo do aluno já oferece telas e API de cadastro, sessão, submissão, resultado, confirmação e encaminhamento. O login e as consultas administrativas ainda serão implementados.
+
+## Telas do aluno
+
+Abra <http://localhost:5173> após iniciar os serviços. O fluxo apresenta cadastro, escolha das afirmativas, revisão das 25 escolhas, resultado com todos os empates, confirmação e encaminhamento. O contador permanece visível; com 25 escolhas, novas marcações são bloqueadas até desmarcar uma. O envio fica disponível somente com exatamente 25 escolhas únicas.
+
+Todas as telas usam Material UI, incluindo cadastro, escolhas, revisão, resultado, encaminhamento, retomada, erros, inatividade e página não encontrada. O tema compartilhado fica em `frontend/src/theme.ts`, com `ThemeProvider`, `CssBaseline` e componentes localizados em português. O CSS global fica restrito ao atalho de navegação por teclado; estilos de componentes e layouts usam o tema e `sx`.
+
+A referência visual é a [página inicial do ISECENSA](https://www.isecensa.edu.br/), consultada em 29/10/2026: azul `#006aa3`, azul-marinho `#0b172b`, rodapé `#001a33`, fundos brancos e detalhes dourados. Inter no texto e Open Sans nos títulos são servidas localmente por Fontsource; suas licenças acompanham o build em `frontend/public/licenses/`. O brasão em `frontend/public/brand/brasao-isecensa.png` foi obtido do [arquivo publicado no site institucional](https://www.isecensa.edu.br/sites/default/files/BRAS%C3%83O%20COLOR.png). O tema adapta essas referências ao quiz; ajustes futuros de marca devem ser feitos nesse tema central.
+
+A escola é escolhida entre os registros ativos por um Autocomplete com busca no servidor. Digitar outro nome desfaz a seleção anterior; é necessário escolher uma opção válida da lista antes de iniciar. O telefone aceita formatação brasileira com DDD e é enviado no formato `+55…`. O aviso configurado pela instituição aparece antes do cadastro. Se catálogo publicado, escolas ou aviso ainda não estiverem preparados, a interface informa a indisponibilidade e permite tentar novamente; não cria nem publica conteúdo automaticamente.
+
+Contatos e marcações ficam apenas na memória da página, sem `localStorage` ou `sessionStorage`. Os contatos saem da tela após iniciar o quiz. Marcações ainda não enviadas se perdem ao recarregar; há aviso ao tentar sair com escolhas e informação explícita na retomada do rascunho. Uma sessão existente oferece continuar ou encerrar antes de outro cadastro, sem exibir automaticamente o resultado anterior. A retomada usa a versão original da participação, inclusive se arquivada.
+
+Se a resposta de um envio se perder, a interface consulta o resultado salvo. Se também não conseguir confirmar essa consulta, mantém as escolhas e bloqueia sua edição até recuperar a resposta ou repetir o mesmo envio. Confirmações usam a mesma regra. O encerramento limpa o estado da tela imediatamente e exige confirmação da API antes de liberar outro cadastro. Outra aba aberta recebe um aviso de encerramento pelo navegador e limpa seu estado.
+
+Após quatro minutos sem interação, um diálogo avisa que a tela será limpa em um minuto e permite continuar. Após cinco minutos, tenta encerrar a sessão e limpa a tela, inclusive formulários ainda não enviados. A expiração da credencial também remove o conteúdo da participação. O encaminhamento permanece disponível até encerrar, expirar ou atingir o limite de inatividade; ao terminar, use “Encerrar e liberar dispositivo”.
+
+### Testes da interface
+
+Instale o Chromium de teste uma vez e execute os cenários de navegador:
+
+```bash
+cd frontend
+npx playwright install chromium
+npm test
+# Os mesmos cenários com os arquivos do build de produção:
+npm run test:build
+```
+
+Em Linux sem bibliotecas do Chromium, prepare as dependências indicadas pelo Playwright (`npx playwright install --with-deps chromium`). Os testes usam servidores temporários locais e dados fictícios. Os cenários incluem Autocomplete, teclado, limite/edição de escolhas, empates, falhas de conexão, reenvio, retomada, expiração, inatividade, encerramento, página não encontrada e layout móvel. `./scripts/check.sh` mantém as verificações de lint/build/backend; os testes de navegador são executados separadamente. O build separa React e Material UI em arquivos próprios para cache e mantém os pesos/subconjuntos de fonte usados pela interface.
+
+Para testar também o fluxo com API real, catálogo original e PostgreSQL, configure um banco de teste cujo nome termine em `_test`:
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://usuario:senha@localhost:5432/iseday_test npm run test:live
+```
+
+Esse comando também exige `uv` no PATH. O servidor de teste cria um esquema aleatório próprio, aplica a migração, importa/publica o catálogo **somente nesse esquema de teste** e adiciona uma escola fictícia. O esquema é removido ao encerrar. Não usa o banco da aplicação nem altera o catálogo publicado nela. As portas 5179 (Vite) e 8009 (API de teste) precisam estar livres. Capturas e traces de teste ficam em `frontend/test-results/`, fora do Git.
 
 ## Catálogo do quiz
 
@@ -171,6 +209,7 @@ Configure `PRIVACY_NOTICE_VERSION` e `PRIVACY_NOTICE_TEXT` no `.env`. O exemplo 
 | `GET /api/schools?q=nome&limit=50` | Escolas ativas; busca por nome e limite de 1 a 100 registros. |
 | `POST /api/participations` | Cadastro validado, participação em rascunho e cookie temporário. |
 | `GET /api/participations/me` | Identificador, versão, estado e expiração da própria sessão, sem contatos. |
+| `GET /api/participations/me/quiz` | Afirmativas da versão vinculada à sessão, inclusive após arquivamento, sem vínculos ou pesos. |
 | `POST /api/participations/me/submit` | Valida 25 escolhas, calcula e grava escolhas/resultados na mesma transação. |
 | `GET /api/participations/me/result` | Resultado persistido da própria participação, com todas as áreas/cursos, empates e eventual confirmação. |
 | `POST /api/participations/me/feedback` | Registra concordância, curso escolhido e destino exibido; conclui a participação na mesma transação. |
@@ -221,8 +260,8 @@ Os testes PostgreSQL exercitam as rotas com banco real, rollback, isolamento de 
 ## Próximas etapas
 
 1. Revisar o catálogo importável e validar conteúdo, metodologia e destinos com a instituição.
-2. Implementar as telas do fluxo do aluno, integradas à API.
-3. Implementar autenticação e consultas administrativas.
+2. Implementar autenticação e consultas administrativas.
+3. Ensaiar o fluxo na rede e nos dispositivos do evento, incluindo acessibilidade, backup e restauração.
 
 Antes da publicação, validar o conteúdo e a metodologia do quiz.
 

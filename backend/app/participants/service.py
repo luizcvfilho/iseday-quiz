@@ -32,6 +32,7 @@ from app.participants.schemas import (
     ParticipationResult,
     ParticipationSession,
     PublicStatement,
+    QuizContent,
     Registration,
 )
 from app.participants.security import token_hash
@@ -58,22 +59,32 @@ def current_quiz(session: Session, settings: Settings) -> CurrentQuiz:
     )
     if version is None:
         raise HTTPException(503, "Nenhum quiz publicado está disponível.")
+    return CurrentQuiz(
+        **quiz_content(session, version).model_dump(),
+        privacy_notice_version=settings.privacy_notice_version,
+        privacy_notice_text=settings.privacy_notice_text,
+    )
+
+
+def quiz_content(session: Session, version: QuizVersion) -> QuizContent:
     statements = session.scalars(
         select(Statement)
         .where(Statement.quiz_version_id == version.id)
         .order_by(Statement.display_order)
     )
-    return CurrentQuiz(
+    return QuizContent(
         id=version.id,
         version_number=version.version_number,
         event_name=version.event_name,
         required_selection_count=version.required_selection_count,
-        privacy_notice_version=settings.privacy_notice_version,
-        privacy_notice_text=settings.privacy_notice_text,
         statements=[
             PublicStatement(id=s.id, display_order=s.display_order, text=s.text) for s in statements
         ],
     )
+
+
+def participant_quiz(session: Session, participant: Participation) -> QuizContent:
+    return quiz_content(session, session.get(QuizVersion, participant.quiz_version_id))
 
 
 def find_participation(session: Session, token: str | None) -> Participation | None:

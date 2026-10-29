@@ -15,6 +15,7 @@ from app.participants.schemas import (
     ParticipationResult,
     ParticipationSession,
     PublicSchool,
+    QuizContent,
     Registration,
     Submission,
 )
@@ -96,6 +97,14 @@ def submit(data: Submission, request: Request, session: Database):
     with session.begin():
         participant = service.authenticated_participation(session, access_token(request))
         return service.submit(session, participant, data.statement_ids)
+
+
+@router.get("/participations/me/quiz", response_model=QuizContent)
+def participant_quiz(request: Request, session: Database):
+    with session.begin():
+        return service.participant_quiz(
+            session, service.authenticated_participation(session, access_token(request))
+        )
 
 
 @router.get("/participations/me/result", response_model=ParticipationResult)
