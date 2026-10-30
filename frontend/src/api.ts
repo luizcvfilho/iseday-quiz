@@ -60,7 +60,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function request<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const timeout = AbortSignal.timeout(15_000)
   let response: Response
   try {

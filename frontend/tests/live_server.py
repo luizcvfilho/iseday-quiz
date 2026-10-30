@@ -7,6 +7,7 @@ from uuid import uuid4
 import uvicorn
 from alembic import command
 from alembic.config import Config
+from app.admin.__main__ import save_account
 from app.catalog import DEFAULT_WORKBOOK, import_catalog, read_catalog
 from app.core.config import Settings
 from app.db import get_session
@@ -22,7 +23,9 @@ def main():
     if not value:
         raise SystemExit("TEST_DATABASE_URL is required for browser integration checks")
     url = make_url(value)
-    if url.drivername != "postgresql+psycopg" or not (url.database or "").endswith("_test"):
+    if url.drivername != "postgresql+psycopg" or not (url.database or "").endswith(
+        "_test"
+    ):
         raise SystemExit("Use postgresql+psycopg and a database ending in _test")
     schema = f"iseday_ui_{uuid4().hex}"
     admin = create_engine(url, hide_parameters=True)
@@ -33,10 +36,14 @@ def main():
         with admin.begin() as connection:
             connection.execute(text(f'CREATE SCHEMA "{schema}"'))
         with engine.begin() as connection:
-            config = Config(str(Path(__file__).resolve().parents[2] / "backend" / "alembic.ini"))
+            config = Config(
+                str(Path(__file__).resolve().parents[2] / "backend" / "alembic.ini")
+            )
             config.attributes["connection"] = connection
             command.upgrade(config, "head")
-        imported = import_catalog(engine, read_catalog(DEFAULT_WORKBOOK), version_number=1)
+        imported = import_catalog(
+            engine, read_catalog(DEFAULT_WORKBOOK), version_number=1
+        )
         with engine.begin() as connection:
             connection.execute(
                 update(QuizVersion)
@@ -44,6 +51,14 @@ def main():
                 .values(status="published")
             )
             connection.execute(insert(School).values(name="Escola de teste (fictícia)"))
+        with Session(engine) as session, session.begin():
+            save_account(
+                session,
+                "create",
+                "admin@example.org",
+                "admin test password only",
+                "Equipe de teste",
+            )
         app = create_app(
             Settings(
                 database_url=url.set(host=url.host or "localhost").render_as_string(

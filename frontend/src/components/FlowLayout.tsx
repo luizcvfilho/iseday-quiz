@@ -164,7 +164,12 @@ export function FlowLayout({
             sx={{ justifyContent: 'space-between' }}
           >
             <Typography variant="caption">ISECENSA · ISE DAY · Quiz de afinidades</Typography>
-            <Typography variant="caption">Há muitos caminhos para descobrir.</Typography>
+            <Stack direction="row" spacing={3}>
+              <Typography variant="caption">Há muitos caminhos para descobrir.</Typography>
+              <Link href="/admin" color="inherit" variant="caption">
+                Acesso administrativo
+              </Link>
+            </Stack>
           </Stack>
         </Container>
       </Box>

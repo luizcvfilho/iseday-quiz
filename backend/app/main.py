@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.admin.router import router as admin_router
 from app.core.config import Settings, get_settings
 from app.db import build_engine, get_session
 from app.participants.router import router as participant_router
@@ -37,6 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = config
     app.state.public_rate_limiter = PublicRateLimiter()
     app.include_router(participant_router)
+    app.include_router(admin_router)
 
     @app.middleware("http")
     async def no_store(request: Request, call_next):

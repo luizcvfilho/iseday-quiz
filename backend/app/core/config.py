@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     participant_session_minutes: int = Field(default=60, ge=1, le=240)
     participant_registration_limit: int = Field(default=60, ge=1)
     participant_submission_limit: int = Field(default=120, ge=1)
+    admin_session_minutes: int = Field(default=480, ge=1, le=1440)
+    admin_login_limit: int = Field(default=10, ge=1)
     privacy_notice_version: str | None = Field(default=None, max_length=100)
     privacy_notice_text: str | None = Field(default=None, max_length=10000)
 

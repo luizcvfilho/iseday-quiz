@@ -107,7 +107,7 @@ scripts/              Setup, desenvolvimento e verificações
 compose.yaml          PostgreSQL, API e frontend em desenvolvimento
 ```
 
-As dependências de backend incluem validação de e-mail, Argon2 para a futura autenticação administrativa e openpyxl para a importação do catálogo. O fluxo do aluno já oferece telas e API de cadastro, sessão, submissão, resultado, confirmação e encaminhamento. O login e as consultas administrativas ainda serão implementados.
+As dependências de backend incluem validação de e-mail, Argon2 para a autenticação administrativa e openpyxl para a importação do catálogo. O fluxo do aluno oferece telas e API de cadastro, sessão, submissão, resultado, confirmação e encaminhamento. A área administrativa oferece login, filtros, resumo e consulta individual dos resultados.
 
 ## Telas do aluno
 
@@ -272,3 +272,57 @@ Antes da publicação, validar o conteúdo e a metodologia do quiz.
 - [Ambiente Python no FastAPI](https://fastapi.tiangolo.com/virtual-environments/)
 - [Instalação do uv](https://docs.astral.sh/uv/getting-started/installation/)
 - [Instalação do Docker](https://docs.docker.com/get-started/get-docker/)
+
+
+## Administração e acesso aos resultados
+
+Abra <http://localhost:5173/admin> ou use “Acesso administrativo” no rodapé do quiz. Sem sessão válida, a aplicação abre `/admin/login`. O administrador entra com e-mail e senha; não existe cadastro público nem conta ou senha padrão.
+
+Após aplicar as migrações, crie a primeira conta em um terminal interativo, a partir da raiz:
+
+```bash
+(cd backend && uv run --frozen python -m app.admin create)
+```
+
+No Docker Compose:
+
+```bash
+docker compose exec -it api uv run --no-sync python -m app.admin create
+```
+
+O comando solicita e-mail, nome, senha e confirmação. A senha exige pelo menos 12 caracteres, não aparece no terminal e é armazenada apenas como hash Argon2. Não passe senhas por argumentos, arquivos de configuração ou variáveis `VITE_*`. Uma conta com o mesmo e-mail, ignorando maiúsculas, é recusada. As tabelas administrativas já pertencem à migração `0001`; esta funcionalidade não exige nova revisão.
+
+Para redefinir uma senha, use o comando abaixo, que solicita o e-mail e a nova senha e revoga todas as sessões anteriores da conta na mesma transação:
+
+```bash
+(cd backend && uv run --frozen python -m app.admin reset-password)
+# Em containers:
+docker compose exec -it api uv run --no-sync python -m app.admin reset-password
+```
+
+A sessão usa um cookie próprio, separado do participante: `iseday_admin` no desenvolvimento e `__Host-iseday_admin` em produção. O cookie é `HttpOnly`, `SameSite=Strict`, válido por oito horas por padrão, com `Secure` em produção. O banco guarda somente o SHA-256 do token opaco. `ADMIN_SESSION_MINUTES` ajusta a duração entre 1 e 1440 minutos; `ADMIN_LOGIN_LIMIT` limita as tentativas por minuto, tanto por IP quanto por conta (padrão: 10). Os limites são por processo, como os do participante; múltiplos workers exigem limitação compartilhada no proxy. IPs encaminhados arbitrariamente não contornam o limite.
+
+Todas as rotas de consulta validam a conta ativa, expiração e revogação no servidor. Login e logout exigem `X-Quiz-Request: 1` e recusam requisições de outra origem, conforme a política de mesma origem da API. Respostas usam `Cache-Control: no-store`; contatos, senhas e tokens não são gravados em localStorage ou sessionStorage. Sair remove os dados da tela imediatamente, revoga a sessão e comunica o encerramento às outras abas. Se o encerramento falhar, a tela permite repetir antes de liberar outro login. Expiração ou resposta 401 exige novo acesso.
+
+O painel apresenta:
+
+- Participações paginadas, da mais recente para a mais antiga, com nome, escola, início, situação, todas as áreas vencedoras, cursos sugeridos e confirmação.
+- Busca por nome e filtros por escola, versão do quiz, situação, área vencedora, curso sugerido, concordância e período de início. As datas incluem os dias inicial e final no horário de Brasília. Os filtros ficam na URL e são preservados ao voltar do detalhe.
+- Totais de iniciadas, em andamento, aguardando confirmação e concluídas, além de distribuição por escola, área e curso. A concordância considera apenas quem respondeu; ausência de confirmação não significa discordância. Empates contam a participação em cada categoria, sem duplicar os totais gerais.
+- Detalhe com cadastro, datas, aviso apresentado, as 25 afirmativas selecionadas, pontuações completas, todos os empates, curso escolhido e encaminhamento efetivamente exibido. Rascunhos informam que ainda não há resultado. Versões arquivadas continuam disponíveis para consulta histórica.
+
+As consultas usam os resultados persistidos, sem recalcular ou editar respostas. Login, logout, criação/redefinição de conta, listagem, resumo e abertura de detalhe geram auditoria com ator, ação, horário e eventual identificador da participação, sem copiar contatos ou senhas.
+
+| Método e rota | Comportamento |
+|---|---|
+| `POST /api/admin/login` | Recebe `email` e `password`; cria a sessão e retorna identidade e validade. |
+| `GET /api/admin/me` | Identidade e expiração da sessão administrativa. |
+| `POST /api/admin/logout` | Revoga a sessão atual e remove o cookie; repetição é segura. |
+| `GET /api/admin/options` | Escolas, versões, áreas e cursos disponíveis para filtrar o histórico. |
+| `GET /api/admin/participations` | Lista sem contatos, com `page` (padrão 1) e `page_size` (padrão 20, máximo 100). |
+| `GET /api/admin/participations/{id}` | Cadastro, seleções, resultado e confirmação de uma participação. |
+| `GET /api/admin/summary` | Contagens e distribuições do conjunto filtrado, independentemente da página. |
+
+Listagem e resumo aceitam `q`, `school_id`, `quiz_version_id`, `status` (`draft`, `submitted`, `completed`), `area_id`, `course_id`, `agreement` (`yes`, `no`, `pending`), `date_from` e `date_to` (`AAAA-MM-DD`). Área e curso filtram apenas indicadores de vitória/sugestão. As consultas mantêm um retrato consistente do banco durante submissões concorrentes.
+
+Os testes PostgreSQL cobrem credenciais incorretas, conta inativa, cookies, expiração, revogação, troca de senha, isolamento do participante, limites, filtros, paginação, empates, rascunhos, histórico e auditoria. `npm --prefix frontend test` inclui os cenários administrativos de navegador, recuperação de erros e layout móvel. `npm --prefix frontend run test:live`, com `TEST_DATABASE_URL`, valida também cadastro → resultado → confirmação → login administrativo → consulta individual → logout contra a API e o banco reais, criando uma conta fictícia exclusivamente no esquema temporário do teste.
