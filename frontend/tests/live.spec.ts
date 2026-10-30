@@ -15,6 +15,12 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.getByRole('textbox', { name: /^E-mail/ }).fill('teste@example.org')
   await page.getByRole('button', { name: 'Começar meu quiz' }).click()
   await expect(page.getByRole('checkbox')).toHaveCount(74)
+  if (process.env.ISEDAY_PRODUCTION_TEST_URL) {
+    const cookie = (await page.context().cookies()).find(
+      (item) => item.name === '__Host-iseday_participant',
+    )
+    expect(cookie).toMatchObject({ secure: true, httpOnly: true, sameSite: 'Strict', path: '/' })
+  }
   await page.screenshot({
     path: testInfo.outputPath('afirmativas-desktop.png'),
     fullPage: true,
@@ -47,6 +53,12 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.getByLabel(/^Senha/).fill('admin test password only')
   await page.getByRole('button', { name: 'Entrar', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Estudantes encontrados (1)' })).toBeVisible()
+  if (process.env.ISEDAY_PRODUCTION_TEST_URL) {
+    const cookie = (await page.context().cookies()).find(
+      (item) => item.name === '__Host-iseday_admin',
+    )
+    expect(cookie).toMatchObject({ secure: true, httpOnly: true, sameSite: 'Strict', path: '/' })
+  }
   await page.getByLabel('Nome do estudante').fill('Aluno fictício')
   await page.getByRole('button', { name: 'Aplicar filtros' }).click()
   await expect(

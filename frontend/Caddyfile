@@ -1,0 +1,32 @@
+{
+	# A API administrativa do Caddy não precisa ficar disponível no container.
+	admin off
+}
+
+{$SITE_ADDRESS} {
+	root * /srv
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+	}
+
+	# Preserva /api e seus códigos de erro; nunca aplica o fallback da SPA aqui.
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	# O Vite inclui hashes nos arquivos de assets. Arquivos ausentes retornam 404.
+	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	handle {
+		# Inclui as rotas do React Router, como /admin/login.
+		try_files {path} /index.html
+		header Cache-Control no-cache
+		file_server
+	}
+}

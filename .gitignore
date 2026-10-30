@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 **/node_modules/
 **/dist/
 **/.venv/
@@ -10,4 +11,5 @@
 **/.ruff_cache/
 **/*.egg-info/
 tmp/
+/backups/
 .DS_Store

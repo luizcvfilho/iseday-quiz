@@ -1,6 +1,8 @@
 # ISE Day Quiz
 
-Base de desenvolvimento do quiz de afinidades: React + TypeScript + Vite, FastAPI e PostgreSQL.
+Quiz de afinidades: React + TypeScript + Vite, FastAPI e PostgreSQL.
+
+Para produção, consulte [PRODUCTION.md](PRODUCTION.md): imagens sem servidor de desenvolvimento, HTTPS, migrações, administração, backup e ensaio com banco descartável. Os comandos de desenvolvimento abaixo continuam independentes.
 
 ## Pré-requisitos
 
@@ -48,7 +50,7 @@ docker compose up --build
 - API ativa: <http://localhost:8000/api/health>
 - API com conexão ao banco: <http://localhost:8000/api/health/ready>
 
-Os serviços são publicados somente em `127.0.0.1`. O Compose serve para desenvolvimento; configuração de produção e HTTPS serão tratados em outra etapa. As credenciais de exemplo são exclusivamente locais. Senhas com caracteres reservados de URL precisam de codificação na `DATABASE_URL` (inclusive no Compose).
+Os serviços são publicados somente em `127.0.0.1`. Este Compose serve para desenvolvimento; use `compose.production.yaml` e siga [PRODUCTION.md](PRODUCTION.md) para produção com HTTPS. As credenciais de exemplo são exclusivamente locais. Senhas com caracteres reservados de URL precisam de codificação na `DATABASE_URL` (inclusive no Compose).
 
 ## Desenvolvimento local
 
@@ -59,7 +61,7 @@ docker compose up -d db
 ./scripts/dev.sh
 ```
 
-O último comando inicia Vite e Uvicorn com recarregamento automático. `Ctrl+C` encerra ambos. O Vite encaminha `/api` para a API, mantendo a mesma origem no navegador. Não use `vite preview` como servidor integrado: esse proxy é de desenvolvimento; a publicação precisará encaminhar `/api` no servidor web.
+O último comando inicia Vite e Uvicorn com recarregamento automático. `Ctrl+C` encerra ambos. O Vite encaminha `/api` para a API, mantendo a mesma origem no navegador. Não use `vite preview` como servidor integrado: esse proxy é de desenvolvimento; em produção, o Caddy encaminha `/api` no servidor web.
 
 A API pode iniciar sem o PostgreSQL: `/api/health` retorna 200; `/api/health/ready` retorna 503 enquanto o banco não estiver acessível.
 

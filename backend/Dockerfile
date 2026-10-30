@@ -9,5 +9,7 @@ COPY app ./app
 COPY catalog ./catalog
 COPY alembic.ini ./
 COPY migrations ./migrations
+RUN useradd --create-home --uid 10001 app && chown -R app:app /app
+USER app
 EXPOSE 8000
 CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

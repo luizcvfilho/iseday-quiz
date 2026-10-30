@@ -1,6 +1,9 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help env setup run up down logs db dev migrate check check-db
+.PHONY: help env setup run up down logs db dev migrate check check-db check-production prod-env prod-build prod-up prod-down prod-logs prod-admin
+
+PROD_ENV_FILE ?= .env.production
+PROD_COMPOSE = docker compose --env-file "$(PROD_ENV_FILE)" -f compose.production.yaml
 
 help:
 	@printf '%s\n' \
@@ -12,7 +15,13 @@ help:
 		'make db        Inicia somente o PostgreSQL e aguarda ficar pronto.' \
 		'make migrate   Aplica as migrações na API em execução no Docker.' \
 		'make check     Executa as verificações de frontend e backend locais.' \
-		'make check-db  Executa os testes de integração PostgreSQL.'
+		'make check-db  Executa os testes de integração PostgreSQL.' \
+		'make check-production Testa produção com HTTPS e banco descartável.' \
+		'make prod-build Constrói as imagens de produção.' \
+		'make prod-up    Inicia produção e aplica migrações antes da API.' \
+		'make prod-down  Encerra produção, preservando os dados.' \
+		'make prod-logs  Acompanha os logs de produção.' \
+		'make prod-admin Cria um administrador em produção (interativo).'
 
 env:
 	@test -f .env || cp .env.example .env
@@ -45,3 +54,25 @@ check:
 
 check-db:
 	./scripts/check-db.sh
+
+check-production:
+	./scripts/check-production.sh
+
+prod-env:
+	@test -f "$(PROD_ENV_FILE)" || { printf '%s\n' 'Copie .env.production.example para $(PROD_ENV_FILE) e preencha os valores. Consulte PRODUCTION.md.'; exit 1; }
+	@$(PROD_COMPOSE) config --quiet
+
+prod-build: prod-env
+	$(PROD_COMPOSE) build
+
+prod-up: prod-env
+	$(PROD_COMPOSE) up --build --detach --wait
+
+prod-down: prod-env
+	$(PROD_COMPOSE) down
+
+prod-logs: prod-env
+	$(PROD_COMPOSE) logs --follow
+
+prod-admin: prod-env
+	$(PROD_COMPOSE) exec api /app/.venv/bin/python -m app.admin create
