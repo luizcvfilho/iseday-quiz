@@ -28,6 +28,7 @@ import { errorMessage } from '../api'
 import { useAdmin } from './context'
 import { adminApi, agreementLabel, dateTime, statusLabel } from './api'
 import type { AdminOptions, Count, ParticipationPage, Summary } from './api'
+import { AdminExport } from './AdminExport'
 
 type FilterState = Record<
   | 'q'
@@ -53,7 +54,9 @@ const empty: FilterState = {
   date_to: '',
 }
 const fromParams = (params: URLSearchParams): FilterState =>
-  Object.fromEntries(Object.keys(empty).map((key) => [key, params.get(key) ?? ''])) as FilterState
+  Object.fromEntries(
+    Object.keys(empty).map((key) => [key, params.get(key) ?? '']),
+  ) as FilterState
 
 export function AdminDashboard() {
   const { call } = useAdmin()
@@ -104,7 +107,8 @@ export function AdminDashboard() {
       ]),
     )
       .then(([list, summary]) => {
-        if (!controller.signal.aborted) setResponse({ key: requestKey, data: { list, summary } })
+        if (!controller.signal.aborted)
+          setResponse({ key: requestKey, data: { list, summary } })
       })
       .catch((e) => {
         if (!controller.signal.aborted) setResponse({ key: requestKey, error: errorMessage(e) })
@@ -131,7 +135,11 @@ export function AdminDashboard() {
     if (size) next.set('page_size', String(size))
     setParams(next)
   }
-  const select = (key: keyof FilterState, label: string, items: { id: string; name: string }[]) => (
+  const select = (
+    key: keyof FilterState,
+    label: string,
+    items: { id: string; name: string }[],
+  ) => (
     <TextField
       select
       label={label}
@@ -227,7 +235,8 @@ export function AdminDashboard() {
             'Área vencedora',
             options?.areas
               .filter(
-                (v) => !filters.quiz_version_id || v.quiz_version_id === filters.quiz_version_id,
+                (v) =>
+                  !filters.quiz_version_id || v.quiz_version_id === filters.quiz_version_id,
               )
               .map((v) => ({
                 ...v,
@@ -239,7 +248,8 @@ export function AdminDashboard() {
             'Curso sugerido',
             options?.courses
               .filter(
-                (v) => !filters.quiz_version_id || v.quiz_version_id === filters.quiz_version_id,
+                (v) =>
+                  !filters.quiz_version_id || v.quiz_version_id === filters.quiz_version_id,
               )
               .map((v) => ({
                 ...v,
@@ -265,7 +275,9 @@ export function AdminDashboard() {
             size="small"
             value={filters.date_to}
             onChange={(e) => change('date_to', e.target.value)}
-            error={!!filters.date_from && !!filters.date_to && filters.date_from > filters.date_to}
+            error={
+              !!filters.date_from && !!filters.date_to && filters.date_from > filters.date_to
+            }
             helperText={
               filters.date_from && filters.date_to && filters.date_from > filters.date_to
                 ? 'A data final deve ser igual ou posterior à inicial.'
@@ -306,6 +318,7 @@ export function AdminDashboard() {
           </Typography>
         </Stack>
       </Paper>
+      <AdminExport key={query} query={query} disabled={busy || !data} />
       {error && (
         <Alert
           severity="error"
@@ -319,7 +332,12 @@ export function AdminDashboard() {
         </Alert>
       )}
       {busy && (
-        <Stack role="status" direction="row" spacing={2} sx={{ py: 4, justifyContent: 'center' }}>
+        <Stack
+          role="status"
+          direction="row"
+          spacing={2}
+          sx={{ py: 4, justifyContent: 'center' }}
+        >
           <CircularProgress size={24} />
           <Typography>Carregando participações…</Typography>
         </Stack>
@@ -424,7 +442,8 @@ export function AdminDashboard() {
                       </TableCell>
                       <TableCell sx={{ maxWidth: 320 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {row.winning_areas.map((a) => a.name).join(', ') || 'Ainda sem resultado'}
+                          {row.winning_areas.map((a) => a.name).join(', ') ||
+                            'Ainda sem resultado'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           {row.recommended_courses.map((c) => c.name).join(', ')}
@@ -461,7 +480,9 @@ export function AdminDashboard() {
               onRowsPerPageChange={(e) => pageTo(1, Number(e.target.value))}
               labelRowsPerPage="Por página:"
               labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
-              getItemAriaLabel={(type) => (type === 'next' ? 'Próxima página' : 'Página anterior')}
+              getItemAriaLabel={(type) =>
+                type === 'next' ? 'Próxima página' : 'Página anterior'
+              }
               sx={{
                 mb: 3,
                 '& .MuiTablePagination-toolbar': {
@@ -478,8 +499,8 @@ export function AdminDashboard() {
             Distribuição dos resultados
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            O resumo acompanha os filtros aplicados. Empates contam o estudante em cada área e curso
-            sugerido; as somas dessas categorias podem superar o total de estudantes.
+            O resumo acompanha os filtros aplicados. Empates contam o estudante em cada área e
+            curso sugerido; as somas dessas categorias podem superar o total de estudantes.
           </Typography>
           <Box
             sx={{

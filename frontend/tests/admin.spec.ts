@@ -75,7 +75,8 @@ async function mockAdmin(page: Page, authenticated = false) {
         areas: areas.map((a) => ({ ...a, quiz_version_id: 'v1' })),
         courses: courses.map((c) => ({ ...c, quiz_version_id: 'v1' })),
       })
-    if (state.failReports) return reply(503, { detail: 'Serviço indisponível. Tente novamente.' })
+    if (state.failReports)
+      return reply(503, { detail: 'Serviço indisponível. Tente novamente.' })
     if (url.pathname === '/api/admin/participations') {
       state.filters.push(url.searchParams)
       const items = url.searchParams.get('q') === 'Ausente' ? [] : [row]
@@ -146,7 +147,9 @@ test('login protege acesso direto, mostra erro e retorna ao resultado solicitado
   await signIn(page)
   await expect(page.getByRole('heading', { name: 'Ana de Teste' })).toBeVisible()
   await expect(page.getByText('ana@example.org')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Afirmativas selecionadas (25)' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Afirmativas selecionadas (25)' }),
+  ).toBeVisible()
   await expect(page.getByText('Espaço de Saúde')).toBeVisible()
   await expect(
     page.getByRole('table', { name: 'Pontuação por área' }).getByText('Vencedora'),
@@ -195,7 +198,9 @@ test('falhas de consulta e logout podem ser recuperadas sem manter dados na tela
   await expect(page.getByRole('heading', { name: 'Entrar na administração' })).toBeVisible()
 })
 
-test('sessão expirada remove o resultado e participação ausente tem retorno', async ({ page }) => {
+test('sessão expirada remove o resultado e participação ausente tem retorno', async ({
+  page,
+}) => {
   const state = await mockAdmin(page, true)
   await page.goto('/admin/participations/missing')
   await expect(page.getByRole('alert')).toContainText('Participação não encontrada.')
@@ -212,16 +217,39 @@ test('painel e detalhe cabem no celular e busca vazia tem mensagem', async ({ pa
   await mockAdmin(page, true)
   await page.goto('/admin')
   await expect(page.getByRole('heading', { name: 'Estudantes encontrados (1)' })).toBeVisible()
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
-  )
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true)
   await page.getByRole('link', { name: 'Ver resultado de Ana de Teste' }).click()
   await expect(page.getByText('ana@example.org')).toBeVisible()
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
-  )
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true)
   await page.getByRole('link', { name: 'Voltar às participações' }).click()
   await page.getByLabel('Nome do estudante').fill('Ausente')
   await page.getByRole('button', { name: 'Aplicar filtros' }).click()
-  await expect(page.getByText('Nenhuma participação encontrada para estes filtros.')).toBeVisible()
+  await expect(
+    page.getByText('Nenhuma participação encontrada para estes filtros.'),
+  ).toBeVisible()
+})
+
+test('exportação usa os filtros aplicados e baixa CSV', async ({ page }) => {
+  await mockAdmin(page, true)
+  let exported: URLSearchParams | undefined
+  await page.route('**/api/admin/export.csv?*', async (route) => {
+    exported = new URL(route.request().url()).searchParams
+    await route.fulfill({
+      contentType: 'text/csv; charset=utf-8',
+      body: '\ufeffNome;Escola\r\nAna de Teste;Escola de teste\r\n',
+    })
+  })
+  await page.goto('/admin?q=Ana&page=2&page_size=20')
+  const button = page.getByRole('button', { name: 'Exportar resultados filtrados (CSV)' })
+  await expect(button).toBeEnabled()
+  const download = page.waitForEvent('download')
+  await button.click()
+  expect((await download).suggestedFilename()).toBe('participacoes-iseday.csv')
+  expect(exported?.get('q')).toBe('Ana')
+  expect(exported?.has('page')).toBe(false)
+  expect(exported?.has('page_size')).toBe(false)
 })

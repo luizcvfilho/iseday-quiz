@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router'
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router'
 import {
   Alert,
   AppBar,
@@ -112,7 +112,11 @@ export function AdminProvider() {
         <StatusScreen
           tag="ADMINISTRAÇÃO"
           title={
-            ending ? 'Encerrando acesso' : loading ? 'Verificando acesso' : 'Acesso indisponível'
+            ending
+              ? 'Encerrando acesso'
+              : loading
+                ? 'Verificando acesso'
+                : 'Acesso indisponível'
           }
           loading={loading || (ending && !error)}
           actions={
@@ -123,7 +127,8 @@ export function AdminProvider() {
             )
           }
         >
-          {error || (ending ? 'Aguarde a confirmação do encerramento.' : 'Aguarde um instante.')}
+          {error ||
+            (ending ? 'Aguarde a confirmação do encerramento.' : 'Aguarde um instante.')}
         </StatusScreen>
       </AdminShell>
     )
@@ -200,6 +205,31 @@ export function AdminShell({
               )}
             </Stack>
           </Toolbar>
+          {user && (
+            <Stack
+              component="nav"
+              aria-label="Administração"
+              direction="row"
+              spacing={1}
+              sx={{ pb: 2, flexWrap: 'wrap' }}
+            >
+              {[
+                ['/admin', 'Participações'],
+                ['/admin/schools', 'Escolas'],
+                ['/admin/versions', 'Versões e destinos'],
+              ].map(([path, label]) => (
+                <Button
+                  key={path}
+                  component={NavLink}
+                  to={path}
+                  end={path === '/admin'}
+                  sx={{ '&.active': { bgcolor: 'action.selected', fontWeight: 800 } }}
+                >
+                  {label}
+                </Button>
+              ))}
+            </Stack>
+          )}
         </Container>
       </AppBar>
       <Container
@@ -213,7 +243,7 @@ export function AdminShell({
       </Container>
       <Container component="footer" maxWidth="lg" sx={{ py: 3 }}>
         <Typography variant="caption" color="text.secondary">
-          ISECENSA · Consulta de participações do ISE Day
+          ISECENSA · Administração do ISE Day
         </Typography>
       </Container>
     </>
@@ -225,7 +255,11 @@ export function RequireAdmin() {
   const location = useLocation()
   if (!user)
     return (
-      <Navigate to="/admin/login" replace state={{ from: location.pathname + location.search }} />
+      <Navigate
+        to="/admin/login"
+        replace
+        state={{ from: location.pathname + location.search }}
+      />
     )
   return (
     <AdminShell user={user} onExit={() => void signOut()}>
@@ -244,7 +278,10 @@ export function AdminLogin() {
   const [error, setError] = useState('')
   const from = location.state?.from
   const destination =
-    typeof from === 'string' && /^\/admin(?:\?|$|\/participations\/)/.test(from) ? from : '/admin'
+    typeof from === 'string' &&
+    /^\/admin(?:\?|$|\/(?:participations|schools|versions)(?:\/|\?|$))/.test(from)
+      ? from
+      : '/admin'
   if (user) return <Navigate to={destination} replace />
   return (
     <AdminShell>
@@ -265,7 +302,7 @@ export function AdminLogin() {
           Entrar na administração
         </Typography>
         <Typography color="text.secondary" sx={{ mb: 3 }}>
-          Consulte as participações e os resultados dos estudantes.
+          Gerencie o quiz e consulte as participações dos estudantes.
         </Typography>
         <Box
           component="form"

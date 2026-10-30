@@ -159,9 +159,12 @@ def register(
     return session_summary(participant), token, True
 
 
-def load_scoring_catalog(session: Session, version_id: UUID) -> ScoringCatalog:
+def load_scoring_catalog(
+    session: Session, version_id: UUID, *, allow_draft: bool = False
+) -> ScoringCatalog:
     version = session.get(QuizVersion, version_id)
-    if version is None or version.status not in {"published", "archived"}:
+    allowed = {"published", "archived", "draft"} if allow_draft else {"published", "archived"}
+    if version is None or version.status not in allowed:
         raise ScoringConfigurationError("A participação não tem uma versão publicada.")
     weights = defaultdict(list)
     for link in session.scalars(

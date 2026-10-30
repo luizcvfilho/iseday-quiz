@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test'
 test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reais', async ({
   page,
 }, testInfo) => {
+  test.setTimeout(60_000)
   await page.goto('/')
   await expect(page.getByLabel('Nome completo')).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
@@ -14,7 +15,10 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.getByRole('textbox', { name: /^E-mail/ }).fill('teste@example.org')
   await page.getByRole('button', { name: 'Começar meu quiz' }).click()
   await expect(page.getByRole('checkbox')).toHaveCount(74)
-  await page.screenshot({ path: testInfo.outputPath('afirmativas-desktop.png'), fullPage: true })
+  await page.screenshot({
+    path: testInfo.outputPath('afirmativas-desktop.png'),
+    fullPage: true,
+  })
   for (let i = 0; i < 25; i++) await page.getByRole('checkbox').nth(i).check()
   await page.getByRole('button', { name: 'Revisar escolhas' }).click()
   await page.getByRole('button', { name: 'Confirmar 25 escolhas' }).click()
@@ -28,7 +32,10 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
     .selectOption({ label: 'Enfermagem · Saúde' })
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
   await expect(page.getByRole('heading', { name: 'Vamos conhecer de perto?' })).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath('encaminhamento-desktop.png'), fullPage: true })
+  await page.screenshot({
+    path: testInfo.outputPath('encaminhamento-desktop.png'),
+    fullPage: true,
+  })
   await page.getByRole('button', { name: 'Encerrar e liberar dispositivo' }).click()
   await expect(page.getByLabel('Nome completo')).toHaveValue('')
   expect((await page.request.get('/api/participations/me')).status()).toBe(401)
@@ -48,12 +55,72 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.screenshot({ path: testInfo.outputPath('admin-painel.png'), fullPage: true })
   await page.getByRole('link', { name: 'Ver resultado de Aluno fictício para teste' }).click()
   await expect(page.getByText('teste@example.org')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Afirmativas selecionadas (25)' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Afirmativas selecionadas (25)' }),
+  ).toBeVisible()
   await expect(
     page.getByRole('table', { name: 'Pontuação por curso' }).getByText('Sugerido'),
   ).toHaveCount(2)
   await expect(page.getByText('Curso escolhido: Enfermagem')).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('admin-detalhe.png'), fullPage: true })
+  await page.getByRole('link', { name: 'Escolas', exact: true }).click()
+  await page.getByRole('button', { name: 'Cadastrar escola', exact: true }).click()
+  await page.getByLabel('Nome da escola').fill('Escola nova do teste de gestão')
+  await page.getByLabel('Cidade', { exact: true }).fill('Campos')
+  await page.getByLabel('UF', { exact: true }).fill('RJ')
+  await page.getByRole('button', { name: 'Salvar escola' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Escola nova do teste de gestão' }),
+  ).toBeVisible()
+  expect((await (await page.request.get('/api/schools?q=Escola nova')).json()).length).toBe(1)
+  await page.getByRole('button', { name: 'Editar Escola nova do teste de gestão' }).click()
+  await page.getByRole('switch', { name: 'Disponível para novos participantes' }).uncheck()
+  await page.getByRole('button', { name: 'Salvar escola' }).click()
+  await expect(page.getByText('Inativa', { exact: true })).toBeVisible()
+  expect((await (await page.request.get('/api/schools?q=Escola nova')).json()).length).toBe(0)
+  await page.screenshot({ path: testInfo.outputPath('admin-escolas.png'), fullPage: true })
+  await page.getByRole('link', { name: 'Versões e destinos' }).click()
+  await page.getByRole('button', { name: 'Copiar versão 1' }).click()
+  await page.getByLabel('Nome do evento').fill('Evento de teste revisado')
+  await page.getByRole('button', { name: 'Criar rascunho', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Evento de teste revisado · versão 2' }),
+  ).toBeVisible()
+  await page.getByLabel('Destino · Saúde').fill('Recepção de Saúde do teste')
+  await page
+    .getByLabel('Instruções · Saúde')
+    .fill('Procure a equipe no térreo do bloco de teste.')
+  await page.getByRole('button', { name: /Perguntas e pesos/ }).click()
+  await page.getByRole('button', { name: 'Editar afirmativa 1', exact: true }).click()
+  await page.getByLabel('Texto da afirmativa').fill('Afirmativa revisada no teste integrado.')
+  await page.getByRole('spinbutton', { name: 'Peso 1', exact: true }).fill('3')
+  await page.getByRole('button', { name: 'Aplicar ao rascunho' }).click()
+  await page.getByRole('button', { name: 'Adicionar afirmativa', exact: true }).click()
+  await page
+    .getByLabel('Texto da afirmativa')
+    .fill('Nova afirmativa criada no teste integrado.')
+  await page.getByRole('button', { name: 'Adicionar curso e peso' }).click()
+  await page.getByRole('spinbutton', { name: 'Peso 1', exact: true }).fill('5')
+  await page.getByRole('button', { name: 'Aplicar ao rascunho' }).click()
+  await page.getByRole('button', { name: 'Salvar rascunho' }).click()
+  await expect(page.getByRole('alert')).toContainText('Rascunho salvo.')
+  await page.screenshot({ path: testInfo.outputPath('admin-destinos.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Publicar versão', exact: true }).click()
+  await page.getByRole('checkbox').check()
+  await page.getByRole('button', { name: 'Confirmar publicação' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Versão publicada.' })).toBeVisible()
+  const current = await (await page.request.get('/api/quiz/current')).json()
+  expect(current.version_number).toBe(2)
+  expect(current.statements).toHaveLength(75)
+  expect(current.statements[0].text).toBe('Afirmativa revisada no teste integrado.')
+  expect(current.statements[74].text).toBe('Nova afirmativa criada no teste integrado.')
+  await page.getByRole('link', { name: 'Participações', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Estudantes encontrados (1)' })).toBeVisible()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Exportar resultados filtrados (CSV)' }).click()
+  await (await download).saveAs(testInfo.outputPath('participacoes.csv'))
+  await page.getByRole('link', { name: 'Ver resultado de Aluno fictício para teste' }).click()
+  await expect(page.getByText('Curso escolhido: Enfermagem')).toBeVisible()
   await page.getByRole('button', { name: 'Sair', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Entrar na administração' })).toBeVisible()
   expect((await page.request.get('/api/admin/me')).status()).toBe(401)

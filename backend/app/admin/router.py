@@ -4,11 +4,12 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
-from app.admin import security, service
+from app.admin import management, management_schemas, security, service
 from app.admin.schemas import (
     AdminIdentity,
     Filters,
@@ -55,6 +56,23 @@ def authorized(request: Request, session: Database):
 
 Access = Annotated[AdminAccess, Depends(authorized, scope="function")]
 ReportFilters = Annotated[Filters, Query()]
+
+
+def write_authorized(request: Request, session: Database):
+    # Writes use fresh snapshots after waiting for the catalog lock.
+    try:
+        with session.begin():
+            user, credential = security.authenticate(session, access_token(request))
+            yield AdminAccess(session, user, credential)
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) in ("40001", "40P01", "23505", "23514", "P0001"):
+            raise HTTPException(
+                409, "Os dados mudaram ou são inconsistentes. Atualize e tente novamente."
+            ) from exc
+        raise
+
+
+WriteAccess = Annotated[AdminAccess, Depends(write_authorized, scope="function")]
 
 
 @router.post("/login", response_model=AdminIdentity, dependencies=WRITE)
@@ -143,3 +161,90 @@ def summary(access: Access, filters: ReportFilters):
     result = service.summary(access.session, filters)
     security.audit(access.session, access.user, "summary.view")
     return result
+
+
+@router.get("/schools", response_model=list[management_schemas.SchoolItem])
+def schools(access: Access, q: str = Query(default="", max_length=200)):
+    return management.schools(access.session, q)
+
+
+@router.post(
+    "/schools", response_model=management_schemas.SchoolItem, status_code=201, dependencies=WRITE
+)
+def create_school(data: management_schemas.SchoolInput, access: WriteAccess):
+    result = management.save_school(access.session, data)
+    security.audit(access.session, access.user, f"schools.create:{result.id}")
+    return result
+
+
+@router.post(
+    "/schools/{school_id}", response_model=management_schemas.SchoolItem, dependencies=WRITE
+)
+def update_school(school_id: UUID, data: management_schemas.SchoolInput, access: WriteAccess):
+    result = management.save_school(access.session, data, school_id)
+    security.audit(access.session, access.user, f"schools.update:{school_id}")
+    return result
+
+
+@router.get("/versions", response_model=list[management_schemas.VersionItem])
+def versions(access: Access):
+    return management.versions(access.session)
+
+
+@router.get("/versions/{version_id}", response_model=management_schemas.VersionDetail)
+def version_detail(version_id: UUID, access: Access):
+    return management.version_detail(access.session, version_id)
+
+
+@router.post(
+    "/versions",
+    response_model=management_schemas.VersionDetail,
+    status_code=201,
+    dependencies=WRITE,
+)
+def create_version(data: management_schemas.NewVersion, access: WriteAccess):
+    result = management.create_version(access.session, data)
+    security.audit(access.session, access.user, f"versions.create:{result.id}")
+    return result
+
+
+@router.post(
+    "/versions/{version_id}", response_model=management_schemas.VersionDetail, dependencies=WRITE
+)
+def update_version(version_id: UUID, data: management_schemas.VersionInput, access: WriteAccess):
+    result = management.save_version(access.session, version_id, data)
+    security.audit(access.session, access.user, f"versions.update:{version_id}")
+    return result
+
+
+@router.post(
+    "/versions/{version_id}/publish",
+    response_model=management_schemas.VersionDetail,
+    dependencies=WRITE,
+)
+def publish_version(version_id: UUID, data: management_schemas.PublishVersion, access: WriteAccess):
+    result = management.publish(access.session, version_id, data)
+    security.audit(access.session, access.user, f"versions.publish:{version_id}")
+    return result
+
+
+@router.post(
+    "/versions/{version_id}/archive",
+    response_model=management_schemas.VersionDetail,
+    dependencies=WRITE,
+)
+def archive_version(version_id: UUID, access: WriteAccess):
+    result = management.archive(access.session, version_id)
+    security.audit(access.session, access.user, f"versions.archive:{version_id}")
+    return result
+
+
+@router.get("/export.csv")
+def export_csv(access: Access, filters: ReportFilters):
+    content = management.export_csv(access.session, filters)
+    security.audit(access.session, access.user, "participations.export")
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="participacoes-iseday.csv"'},
+    )

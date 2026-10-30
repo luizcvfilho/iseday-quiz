@@ -280,12 +280,6 @@ As respostas `/api/` usam `Cache-Control: no-store`; erros de validação omitem
 
 Os testes PostgreSQL exercitam as rotas com banco real, rollback, isolamento de sessões, expiração, revogação, arquivo de versões, destinos de curso/área/SPA, submissões e confirmações concorrentes. Execute-os com `./scripts/check-db.sh` ou com `TEST_DATABASE_URL` apontando para um banco descartável cujo nome termine em `_test`.
 
-## Próximas etapas
-
-1. Revisar o catálogo importável e validar conteúdo, metodologia e destinos com a instituição.
-2. Implementar autenticação e consultas administrativas.
-3. Ensaiar o fluxo na rede e nos dispositivos do evento, incluindo acessibilidade, backup e restauração.
-
 Antes da publicação, validar o conteúdo e a metodologia do quiz.
 
 ## Referências
@@ -349,3 +343,36 @@ As consultas usam os resultados persistidos, sem recalcular ou editar respostas.
 Listagem e resumo aceitam `q`, `school_id`, `quiz_version_id`, `status` (`draft`, `submitted`, `completed`), `area_id`, `course_id`, `agreement` (`yes`, `no`, `pending`), `date_from` e `date_to` (`AAAA-MM-DD`). Área e curso filtram apenas indicadores de vitória/sugestão. As consultas mantêm um retrato consistente do banco durante submissões concorrentes.
 
 Os testes PostgreSQL cobrem credenciais incorretas, conta inativa, cookies, expiração, revogação, troca de senha, isolamento do participante, limites, filtros, paginação, empates, rascunhos, histórico e auditoria. `npm --prefix frontend test` inclui os cenários administrativos de navegador, recuperação de erros e layout móvel. `npm --prefix frontend run test:live`, com `TEST_DATABASE_URL`, valida também cadastro → resultado → confirmação → login administrativo → consulta individual → logout contra a API e o banco reais, criando uma conta fictícia exclusivamente no esquema temporário do teste.
+
+### Gestão de escolas, versões e destinos
+
+Depois de entrar, use a navegação **Participações**, **Escolas** e **Versões e destinos**:
+
+- Em **Escolas** (`/admin/schools`), cadastre e edite nome, cidade, UF e disponibilidade. Escolas inativas deixam de aparecer para novos cadastros; as participações existentes continuam disponíveis e podem ser concluídas. Não há exclusão de escolas pelo painel.
+- Em **Versões e destinos** (`/admin/versions`), crie um rascunho a partir do catálogo original de 74 afirmativas ou copie qualquer versão existente. A cópia recebe outro número e novos identificadores, preservando textos, vínculos, pesos e destinos da origem.
+- Abra uma versão para configurar nome do evento, acolhimento em Psicologia/SPA, destinos e instruções de cada área e, opcionalmente, de cada curso. Destino e instruções do curso precisam ser informados juntos; ambos vazios usam o encaminhamento da área. Somente rascunhos podem ser editados.
+- Em **Perguntas e pesos**, busque e edite afirmativas existentes ou use **Adicionar afirmativa**. O editor permite vincular cursos, adicionar/remover vínculos e ajustar os respectivos pesos. **Aplicar ao rascunho** mantém a alteração no formulário; **Salvar rascunho** grava perguntas, pesos e destinos juntos. Novas afirmativas entram no final e recebem numeração automaticamente ao salvar. A versão aceita até 1.000 afirmativas; cada uma precisa de texto único (até 4.000 caracteres) e pelo menos um curso, sem vínculos repetidos, com pesos inteiros de 1 a 32.767. Os cursos precisam pertencer à versão. O aluno continua selecionando exatamente 25 afirmativas; os pesos alteram a soma por curso e a área continua contando um ponto distinto por afirmativa. A publicação exige que todos os cursos e áreas estejam cobertos. Versões publicadas ou arquivadas permitem somente consulta; crie uma cópia para revisar o conteúdo. A importação por planilha continua disponível como alternativa. A conferência no painel não substitui a validação institucional.
+- **Publicar versão** exige salvar as alterações e confirmar a revisão institucional. A publicação valida o catálogo e arquiva a versão anterior na mesma transação. Novos cadastros usam a nova versão; participações já iniciadas e resultados antigos mantêm sua versão original. **Arquivar versão** interrompe novos cadastros até outra publicação.
+
+Alterações concorrentes no rascunho são detectadas por uma revisão do conteúdo. A publicação também verifica se a versão anteriormente publicada continua sendo a mesma apresentada ao administrador. Conflitos retornam 409 e pedem recarregamento/revisão. As operações de escrita exigem sessão administrativa e a proteção de mesma origem já usada pela API; criação/edição, publicação e arquivamento geram auditoria. Não há nova migração nesta etapa.
+
+### Exportação de resultados
+
+No painel de participações, **Exportar resultados filtrados (CSV)** baixa todas as participações correspondentes aos filtros aplicados, independentemente da página atual. O CSV abre em Excel e outros editores de planilha, usa UTF-8 com BOM, separador `;` e datas no horário de Brasília. Inclui identificação da participação, nome, escola, versão, situação, início, todas as áreas vencedoras, cursos sugeridos e confirmação, sem contatos. Empates permanecem na mesma linha.
+
+A exportação exige autenticação, gera auditoria e neutraliza células que poderiam ser interpretadas como fórmulas. O limite é de 10.000 participações por arquivo; refine os filtros para conjuntos maiores.
+
+| Método e rota | Comportamento |
+|---|---|
+| `GET /api/admin/schools?q=nome` | Lista escolas ativas e inativas, com busca pelo nome. |
+| `POST /api/admin/schools` | Cadastra uma escola. |
+| `POST /api/admin/schools/{id}` | Atualiza os dados e a disponibilidade da escola. |
+| `GET /api/admin/versions` | Lista versões e quantidade de afirmativas. |
+| `GET /api/admin/versions/{id}` | Conteúdo, destinos e revisão da versão. |
+| `POST /api/admin/versions` | Cria um rascunho original ou uma cópia. |
+| `POST /api/admin/versions/{id}` | Atualiza destinos, afirmativas e pesos do rascunho com `expected_revision`. Envie todas as afirmativas existentes (com `id`) e as novas (sem `id` ou com `id: null`), cada uma com `text` e `courses: [{course_id, weight}]`. |
+| `POST /api/admin/versions/{id}/publish` | Publica com revisão institucional confirmada, `expected_revision` e `expected_published_id` (ou `null` se não houver publicação). |
+| `POST /api/admin/versions/{id}/archive` | Arquiva a versão publicada, preservando participações. |
+| `GET /api/admin/export.csv` | Exporta o conjunto filtrado; aceita os mesmos filtros da consulta administrativa. |
+
+Os testes adicionais verificam autenticação e CSRF das operações, gestão de escolas, importação e cópia de versões, edição atômica de destinos/perguntas/pesos, rejeição de textos e vínculos duplicados ou externos à versão, pontuação com os novos pesos, detecção de rascunho desatualizado, publicação concorrente, preservação do histórico e exportação com filtros/empates/proteção contra fórmulas. Os cenários de navegador cobrem as novas telas, falhas recuperáveis e navegação móvel. O teste com API e banco reais também cadastra/inativa uma escola, copia/configura/publica uma versão com pergunta nova e pesos editados e baixa um CSV, sempre no esquema descartável de teste.
