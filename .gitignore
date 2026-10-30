@@ -12,4 +12,6 @@
 **/*.egg-info/
 tmp/
 /backups/
+/docs/database-schema.sql
+/docs/plano-aplicacao.md
 .DS_Store
