@@ -12,6 +12,29 @@ Para executar toda a aplicação em containers, apenas Docker com Compose é nec
 
 O uv instala a versão de Python definida em `backend/.python-version` quando necessário.
 
+## Comandos com Make
+
+Com GNU Make instalado, execute na raiz do repositório:
+
+```bash
+make run
+```
+
+Esse comando cria `.env` a partir de `.env.example` se necessário e inicia PostgreSQL, API e frontend com Docker Compose, reconstruindo as imagens. Revise as configurações locais antes de iniciar. O frontend fica em <http://localhost:5173> e a documentação da API em <http://localhost:8000/api/docs>. Use `make down` para encerrar os containers preservando os dados e `make logs` para acompanhar os logs. `make up` é um alias de `make run`.
+
+Em outro terminal, com a API em execução, aplique as migrações com `make migrate`. A preparação do catálogo, das escolas e da conta administrativa segue as instruções das seções abaixo.
+
+Para desenvolvimento local, com Node.js, npm, uv e Docker disponíveis:
+
+```bash
+make setup
+make dev
+```
+
+`make setup` instala as dependências e cria `.env` se necessário. `make dev` inicia o PostgreSQL no Docker, aguarda o banco ficar pronto e executa frontend e API locais com recarregamento automático; `Ctrl+C` encerra esses dois processos. Use `make down` para encerrar também o banco.
+
+`make check` executa as verificações existentes e `make check-db` executa os testes de integração PostgreSQL. `make` ou `make help` lista os comandos disponíveis.
+
 ## Início rápido com Docker
 
 ```bash
