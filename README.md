@@ -33,7 +33,7 @@ make setup
 make dev
 ```
 
-`make setup` instala as dependências e cria `.env` se necessário. `make dev` inicia o PostgreSQL no Docker, aguarda o banco ficar pronto e executa frontend e API locais com recarregamento automático; `Ctrl+C` encerra esses dois processos. Use `make down` para encerrar também o banco.
+`make setup` instala as dependências, o Chromium e o hook pre-commit neste clone, e cria `.env` se necessário. `make dev` inicia o PostgreSQL no Docker, aguarda o banco ficar pronto e executa frontend e API locais com recarregamento automático; `Ctrl+C` encerra esses dois processos. Use `make down` para encerrar também o banco.
 
 `make check` executa as verificações existentes e `make check-db` executa os testes de integração PostgreSQL. `make` ou `make help` lista os comandos disponíveis.
 
@@ -56,7 +56,7 @@ Os serviços são publicados somente em `127.0.0.1`. Este Compose serve para des
 
 ```bash
 ./scripts/setup.sh
-# Instala com package-lock.json e uv.lock; cria .env se ainda não existir.
+# Instala dependências, Chromium e pre-commit; cria .env se ainda não existir.
 docker compose up -d db
 ./scripts/dev.sh
 ```
@@ -76,6 +76,53 @@ npm --prefix frontend run dev
 O arquivo `.env` fica na raiz e não é versionado. `DATABASE_URL` configura a API local; no Compose o host do banco é substituído por `db`. Ao mudar `POSTGRES_PORT`, ajuste também a porta em `DATABASE_URL`. Variáveis de ambiente do processo têm precedência. Nunca coloque segredos em variáveis `VITE_*`, pois elas são públicas no navegador.
 
 ## Verificações
+
+O workflow [CI](.github/workflows/ci.yml) executa automaticamente em pushes e pull requests, e também pode ser iniciado manualmente na aba Actions do GitHub. Os jobs verificam:
+
+- Oxlint, Ruff e formatação Python.
+- Todos os testes do backend, incluindo integração com PostgreSQL 17 obrigatório.
+- Build/TypeScript e testes Chromium do frontend, tanto no build quanto com API e PostgreSQL reais.
+- O ensaio de produção com Docker/HTTPS, persistência e backup/restauração (`make check-production`).
+
+O CI usa Node.js de `.nvmrc`, Python de `backend/.python-version` e instalações pelos lockfiles. Os bancos e containers são descartáveis, com dados fictícios; não é necessário configurar secrets ou arquivos `.env`. Em falhas de navegador, os traces ficam disponíveis como artifacts por sete dias.
+
+O [pre-commit](.pre-commit-config.yaml) executa lint, tipos, build e testes de backend/frontend antes de cada commit, sobre todo o projeto, e bloqueia o commit em caso de falha. O ensaio de produção com Docker/HTTPS é executado automaticamente apenas no CI do GitHub. Cada etapa local aparece separadamente com seu próprio resultado; as etapas seguintes continuam sendo executadas mesmo quando uma falha:
+
+| ID do hook | Verificação |
+| --- | --- |
+| `frontend-lint` | Lint do frontend com Oxlint |
+| `backend-lint` | Lint do backend com Ruff |
+| `backend-format` | Formatação Python, sem modificar arquivos |
+| `frontend-typecheck` | Tipos do frontend, configuração e testes Playwright |
+| `frontend-build` | Build do frontend com Vite |
+| `backend-tests` | Testes unitários do backend |
+| `backend-postgres-tests` | Testes de integração com PostgreSQL real |
+| `frontend-tests` | Testes Chromium sobre o build já gerado |
+| `frontend-live-tests` | Fluxo de navegador com API e PostgreSQL reais |
+
+Tipos e build são executados uma vez antes dos testes de interface. A etapa de integração de navegador executa somente `live.spec.ts`; os demais cenários ficam na etapa de frontend. No CI, o ensaio Docker constrói suas próprias imagens de produção; ele também pode ser iniciado manualmente com `make check-production`.
+
+O hook é instalado por `make setup`. Para ativá-lo em um clone já preparado, instale também o Chromium da versão atual do Playwright:
+
+```bash
+uv sync --project backend --frozen
+make setup-browser
+make hooks
+```
+
+Para executar todas as etapas manualmente, use `make check-all` ou `uv run --project backend --frozen pre-commit run --all-files`. Para ver também a saída das etapas aprovadas, use `bash scripts/check-all.sh --verbose`. Para executar um hook isolado, por exemplo os testes do PostgreSQL:
+
+```bash
+uv run --project backend --frozen pre-commit run backend-postgres-tests --all-files
+```
+
+Ao executar `frontend-tests` isoladamente, gere o build antes com `npm --prefix frontend run build`; na execução completa, o hook `frontend-build` já faz isso.
+
+A suíte local exige Node.js, npm, uv, Docker e Chromium do Playwright. Sem `TEST_DATABASE_URL`, as etapas PostgreSQL e de integração do navegador criam e removem seus próprios bancos temporários. As portas 5179 e 8009 precisam estar livres. Tanto o pre-commit quanto `make check-all` deixam o ensaio de produção fora da execução local automática.
+
+Se aparecer `Executable doesn't exist ... chromium_headless_shell`, execute `make setup-browser` no mesmo ambiente em que roda o Git/pre-commit (por exemplo, dentro do WSL). Repita após atualizar o Playwright, pois cada versão exige seus próprios binários. Se faltarem bibliotecas de sistema em Linux, execute `make setup-browser-deps` em um terminal interativo; a instalação pode solicitar a senha do sudo. Confira `PLAYWRIGHT_BROWSERS_PATH` se tiver personalizado o cache. Antes de cada suíte de navegador, o projeto tenta iniciar o Chromium e informa a correção necessária uma única vez por suíte, em vez de falhar em todos os cenários.
+
+Para executar as verificações localmente:
 
 ```bash
 ./scripts/check.sh

@@ -1,0 +1,48 @@
+minimum_pre_commit_version: '4.4.0'
+default_install_hook_types: [pre-commit]
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      - &project-check
+        id: frontend-lint
+        name: Frontend lint (Oxlint)
+        entry: npm --prefix frontend run lint
+        language: unsupported
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+        require_serial: true
+      - <<: *project-check
+        id: backend-lint
+        name: Backend lint (Ruff)
+        entry: uv run --project backend --frozen ruff check backend
+      - <<: *project-check
+        id: backend-format
+        name: Backend formatting (Ruff)
+        entry: uv run --project backend --frozen ruff format --check backend
+      - <<: *project-check
+        id: frontend-typecheck
+        name: Frontend and Playwright types (TypeScript)
+        entry: npm --prefix frontend run typecheck
+      - <<: *project-check
+        id: frontend-build
+        name: Frontend build (Vite)
+        entry: npm --prefix frontend run build:assets
+      - <<: *project-check
+        id: backend-tests
+        name: Backend unit tests (pytest)
+        entry: uv run --project backend --frozen pytest backend/tests --ignore=backend/tests/postgres
+      - <<: *project-check
+        id: backend-postgres-tests
+        name: Backend PostgreSQL integration tests
+        entry: bash scripts/check-db.sh
+      - <<: *project-check
+        id: frontend-tests
+        name: Frontend browser tests (Chromium, built app)
+        entry: npm --prefix frontend run test:preview -- --workers=1
+      - <<: *project-check
+        id: frontend-live-tests
+        name: Browser integration tests (API and PostgreSQL)
+        entry: bash scripts/with-test-db.sh npm --prefix frontend run test:live -- --workers=1

@@ -13,4 +13,6 @@ if [[ ! -f .env ]]; then
 fi
 npm --prefix frontend ci
 uv sync --project backend --frozen
-echo "Dependencias instaladas. Inicie o banco com docker compose up -d db."
+uv run --project backend --frozen pre-commit install
+npm --prefix frontend run browser:install
+echo "Dependencias, hook pre-commit e Chromium instalados. Inicie o banco com docker compose up -d db."

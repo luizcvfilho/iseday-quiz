@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Linters
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install dependencies
+        run: |
+          npm --prefix frontend ci
+          uv sync --project backend --frozen
+      - name: Frontend lint
+        run: npm --prefix frontend run lint
+      - name: Python lint
+        run: uv run --project backend --frozen ruff check backend
+      - name: Python formatting
+        run: uv run --project backend --frozen ruff format --check backend
+
+  backend:
+    name: Backend and PostgreSQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: iseday_test
+          POSTGRES_USER: iseday
+          POSTGRES_PASSWORD: iseday_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U iseday -d iseday_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://iseday:iseday_test@127.0.0.1:5432/iseday_test
+      REQUIRE_POSTGRES_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install dependencies
+        run: uv sync --project backend --frozen
+      - name: Backend unit tests
+        run: uv run --project backend --frozen pytest backend/tests --ignore=backend/tests/postgres
+      - name: Backend PostgreSQL integration tests
+        run: uv run --project backend --frozen pytest backend/tests/postgres
+
+  browser:
+    name: Frontend and browser integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: iseday_test
+          POSTGRES_USER: iseday
+          POSTGRES_PASSWORD: iseday_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U iseday -d iseday_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://iseday:iseday_test@127.0.0.1:5432/iseday_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install dependencies
+        run: |
+          npm --prefix frontend ci
+          uv sync --project backend --frozen
+      - name: Install Chromium and system dependencies
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Frontend and Playwright typecheck
+        run: npm --prefix frontend run typecheck
+      - name: Frontend build
+        run: npm --prefix frontend run build:assets
+      - name: Browser tests on the built app
+        run: npm --prefix frontend run test:preview -- --workers=1
+      - name: Browser tests with real API and PostgreSQL
+        run: npm --prefix frontend run test:live -- --workers=1
+      - name: Upload browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-test-results
+          path: frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  production:
+    name: Production Docker and HTTPS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm --prefix frontend ci
+      - name: Install Chromium and system dependencies
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Production checks with disposable containers
+        run: make check-production
+      - name: Upload production failure traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-test-results
+          path: frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

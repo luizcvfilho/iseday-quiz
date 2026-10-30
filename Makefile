@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help env setup run up down logs db dev migrate check check-db check-production prod-env prod-build prod-up prod-down prod-logs prod-admin
+.PHONY: help env setup setup-browser setup-browser-deps hooks run up down logs db dev migrate check check-all check-db check-production prod-env prod-build prod-up prod-down prod-logs prod-admin
 
 PROD_ENV_FILE ?= .env.production
 PROD_COMPOSE = docker compose --env-file "$(PROD_ENV_FILE)" -f compose.production.yaml
@@ -11,10 +11,14 @@ help:
 		'make down      Encerra os containers, preservando os dados.' \
 		'make logs      Acompanha os logs dos containers.' \
 		'make setup     Instala as dependências para desenvolvimento local.' \
+		'make setup-browser Instala o Chromium exigido pelo Playwright.' \
+		'make setup-browser-deps Instala Chromium e bibliotecas de sistema (pode exigir sudo).' \
+		'make hooks     Instala o hook pre-commit neste clone.' \
 		'make dev       Inicia o banco no Docker e frontend/API locais.' \
 		'make db        Inicia somente o PostgreSQL e aguarda ficar pronto.' \
 		'make migrate   Aplica as migrações na API em execução no Docker.' \
 		'make check     Executa as verificações de frontend e backend locais.' \
+		'make check-all Executa todas as etapas do pre-commit, sem o ensaio de produção.' \
 		'make check-db  Executa os testes de integração PostgreSQL.' \
 		'make check-production Testa produção com HTTPS e banco descartável.' \
 		'make prod-build Constrói as imagens de produção.' \
@@ -28,6 +32,15 @@ env:
 
 setup:
 	./scripts/setup.sh
+
+setup-browser:
+	npm --prefix frontend run browser:install
+
+setup-browser-deps:
+	npm --prefix frontend run browser:install -- --with-deps
+
+hooks:
+	uv run --project backend --frozen pre-commit install
 
 run: up
 
@@ -51,6 +64,9 @@ migrate:
 
 check:
 	./scripts/check.sh
+
+check-all:
+	bash ./scripts/check-all.sh
 
 check-db:
 	./scripts/check-db.sh

@@ -10,12 +10,12 @@ if (productionUrl && !/^https:\/\/localhost:\d+$/.test(productionUrl)) {
 }
 export default defineConfig({
   testDir: './tests',
-  testMatch: productionUrl ? ['**/live.spec.ts', '**/production.spec.ts'] : undefined,
-  testIgnore: productionUrl
-    ? []
+  testMatch: productionUrl
+    ? ['**/live.spec.ts', '**/production.spec.ts']
     : live
-      ? ['**/production.spec.ts']
-      : ['**/live.spec.ts', '**/production.spec.ts'],
+      ? ['**/live.spec.ts']
+      : undefined,
+  testIgnore: productionUrl || live ? [] : ['**/live.spec.ts', '**/production.spec.ts'],
   fullyParallel: true,
   timeout: 30_000,
   use: {

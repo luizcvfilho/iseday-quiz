@@ -5,11 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "build:assets": "vite build",
+    "build": "npm run typecheck && npm run build:assets",
     "lint": "oxlint",
     "preview": "vite preview",
+    "browser:install": "playwright install chromium",
+    "browser:check": "node scripts/check-browser.mjs",
+    "pretest": "npm run browser:check",
     "test": "playwright test",
-    "test:build": "npm run build && ISEDAY_UI_BUILD=1 playwright test",
+    "pretest:preview": "npm run browser:check",
+    "test:preview": "ISEDAY_UI_BUILD=1 playwright test",
+    "test:build": "npm run build && npm run test:preview --",
+    "pretest:live": "npm run browser:check",
     "test:live": "ISEDAY_UI_LIVE=1 playwright test"
   },
   "dependencies": {
