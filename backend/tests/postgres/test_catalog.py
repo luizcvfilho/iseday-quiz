@@ -39,7 +39,7 @@ def test_import_roundtrip_idempotence_and_preserved_published_version(catalog_da
     catalog = read_catalog(DEFAULT_WORKBOOK)
     first = import_catalog(engine, catalog, version_number=1)
     assert first.created and first.status == "draft"
-    assert counts(engine) == [1, 5, 11, 74, 96]
+    assert counts(engine) == [1, 5, 9, 74, 78]
     again = import_catalog(engine, catalog, version_number=1)
     assert not again.created and again.version_id == first.version_id
     with engine.begin() as connection:
@@ -57,7 +57,7 @@ def test_import_roundtrip_idempotence_and_preserved_published_version(catalog_da
         connection.execute(update(QuizVersion).values(status="published"))
     published = import_catalog(engine, catalog, version_number=1)
     assert not published.created and published.status == "published"
-    assert counts(engine) == [1, 5, 11, 74, 96]
+    assert counts(engine) == [1, 5, 9, 74, 78]
 
 
 def test_conflict_never_replaces_content_and_new_version_has_new_ids(catalog_database):
@@ -75,10 +75,10 @@ def test_conflict_never_replaces_content_and_new_version_has_new_ids(catalog_dat
         import_catalog(engine, changed, version_number=1)
     with pytest.raises(CatalogError, match="conteúdo diferente"):
         import_catalog(engine, catalog, version_number=1, event_name="Outro evento")
-    assert counts(engine) == [1, 5, 11, 74, 96]
+    assert counts(engine) == [1, 5, 9, 74, 78]
     second = import_catalog(engine, changed, version_number=2)
     assert second.created and second.version_id != first.version_id
-    assert counts(engine) == [2, 10, 22, 148, 192]
+    assert counts(engine) == [2, 10, 18, 148, 156]
 
 
 def test_detects_modified_weights_not_just_counts(catalog_database):
@@ -117,4 +117,4 @@ def test_concurrent_identical_imports_create_one_draft(catalog_database):
         results = [future.result(timeout=15) for future in futures]
     assert sorted(result.created for result in results) == [False, True]
     assert results[0].version_id == results[1].version_id
-    assert counts(engine) == [1, 5, 11, 74, 96]
+    assert counts(engine) == [1, 5, 9, 74, 78]

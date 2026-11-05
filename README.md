@@ -221,7 +221,7 @@ Esse comando também exige `uv` no PATH. O servidor de teste cria um esquema ale
 
 ## Catálogo do quiz
 
-A cópia original da planilha está em `backend/catalog/quiz-final.xlsx`. O catálogo normalizado, o SHA-256 da fonte e as pendências de revisão estão em `backend/catalog/quiz-final.json`: **74 afirmativas, 11 cursos, 5 áreas e 96 vínculos**, com peso proposto de 1 por vínculo. Os textos originais são preservados, inclusive possíveis erros de digitação.
+A planilha do catálogo está em `backend/catalog/quiz-final.xlsx`. O catálogo normalizado, o SHA-256 da fonte e as pendências de revisão estão em `backend/catalog/quiz-final.json`: **74 afirmativas, 9 cursos, 5 áreas e 78 vínculos**, com peso proposto de 1 por vínculo. Engenharia Civil e Mecânica formam uma única opção, assim como Enfermagem e Fisioterapia. Cada grupo recebe apenas um vínculo por afirmativa, sem duplicar a pontuação. As abas `Tabela_Area` e `Tabela_Cursos` usam os mesmos 9 cursos já agrupados; o importador valida os nomes diretamente, sem separar e reagrupar os pares. Os textos originais são preservados, inclusive possíveis erros de digitação.
 
 Valide sem precisar de banco (comandos a partir da raiz):
 
@@ -248,6 +248,8 @@ docker compose exec api uv run --no-sync python -m app.catalog import --version 
 ```
 
 O comando grava **somente um rascunho**, em uma única transação. Repetir a mesma importação para a mesma versão retorna o registro existente; conteúdo diferente é rejeitado sem sobrescrever dados. Use outro número de versão para uma revisão. Importações concorrentes são serializadas. Versões publicadas ou arquivadas nunca são alteradas ou republicadas pelo importador.
+
+**Instalações existentes:** em **Versões e destinos**, copie a versão em uso para gerar um rascunho com os cursos agrupados, revise os destinos e publique a nova versão. O agrupamento vale para os novos cadastros após a publicação; participações iniciadas e resultados anteriores mantêm o catálogo histórico. Não é necessária uma migração de banco.
 
 O importador exige o modelo das duas abas da planilha e rejeita fórmulas, números ou frases duplicados, cursos desconhecidos, vínculos repetidos e conteúdo incompleto. `--file /caminho/planilha.xlsx` permite validar uma revisão com a mesma estrutura; `--event "Nome do evento"` define o evento na importação.
 
@@ -396,7 +398,7 @@ Os testes PostgreSQL cobrem credenciais incorretas, conta inativa, cookies, expi
 
 Depois de entrar, use a navegação **Participações** e **Versões e destinos**:
 
-- Em **Versões e destinos** (`/admin/versions`), crie um rascunho a partir do catálogo original de 74 afirmativas ou copie qualquer versão existente. A cópia recebe outro número e novos identificadores, preservando textos, vínculos, pesos e destinos da origem.
+- Em **Versões e destinos** (`/admin/versions`), crie um rascunho a partir do catálogo original de 74 afirmativas ou copie qualquer versão existente. A cópia recebe outro número e novos identificadores, preservando textos e destinos da origem. Ao copiar versões antigas, Engenharia Civil e Mecânica e Enfermagem e Fisioterapia são consolidados nos respectivos grupos. Vínculos com a mesma afirmativa viram um único vínculo com o maior peso existente, sem somar os pesos do par. Áreas e destinos dos cursos agrupados precisam coincidir; se houver divergência, ajuste os destinos em um rascunho antes de copiá-lo ou crie um rascunho a partir do catálogo original.
 - Abra uma versão para configurar nome do evento, acolhimento em Psicologia/SPA, destinos e instruções de cada área e, opcionalmente, de cada curso. Destino e instruções do curso precisam ser informados juntos; ambos vazios usam o encaminhamento da área. Somente rascunhos podem ser editados.
 - Em **Perguntas e pesos**, busque e edite afirmativas existentes ou use **Adicionar afirmativa**. O editor permite vincular cursos, adicionar/remover vínculos e ajustar os respectivos pesos. **Aplicar ao rascunho** mantém a alteração no formulário; **Salvar rascunho** grava perguntas, pesos e destinos juntos. Novas afirmativas entram no final e recebem numeração automaticamente ao salvar. A versão aceita até 1.000 afirmativas; cada uma precisa de texto único (até 4.000 caracteres) e pelo menos um curso, sem vínculos repetidos, com pesos inteiros de 1 a 32.767. Os cursos precisam pertencer à versão. O aluno continua selecionando exatamente 25 afirmativas; os pesos alteram a soma por curso e a área continua contando um ponto distinto por afirmativa. A publicação exige que todos os cursos e áreas estejam cobertos. Versões publicadas ou arquivadas permitem somente consulta; crie uma cópia para revisar o conteúdo. A importação por planilha continua disponível como alternativa. A conferência no painel não substitui a validação institucional.
 - **Publicar versão** exige salvar as alterações e confirmar a revisão institucional. A publicação valida o catálogo e arquiva a versão anterior na mesma transação. Novos cadastros usam a nova versão; participações já iniciadas e resultados antigos mantêm sua versão original. **Arquivar versão** interrompe novos cadastros até outra publicação.

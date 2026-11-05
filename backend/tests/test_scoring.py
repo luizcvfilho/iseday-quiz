@@ -239,10 +239,8 @@ def test_original_catalog_first_25_statements_have_known_scores(workbook_catalog
         "Administração": 2,
         "Direito": 3,
         "Engenharia de Produção": 2,
-        "Engenharia Civil": 1,
-        "Engenharia Mecânica": 1,
-        "Enfermagem": 8,
-        "Fisioterapia": 8,
+        "Engenharia Civil e Mecânica": 1,
+        "Enfermagem e Fisioterapia": 8,
         "Educação Física": 3,
         "Psicologia": 0,
         "Pedagogia": 4,
@@ -253,21 +251,22 @@ def test_original_catalog_first_25_statements_have_known_scores(workbook_catalog
     }
     assert {area.area_id for area in result.areas if area.is_winner} == {areas["Saúde"]}
     assert {course.course_id for course in result.courses if course.is_recommended} == {
-        courses["Enfermagem"],
-        courses["Fisioterapia"],
+        courses["Enfermagem e Fisioterapia"],
     }
 
 
-def test_identical_course_mappings_remain_tied_across_original_catalog(workbook_catalog):
+def test_grouped_courses_score_once_per_selected_statement(workbook_catalog):
     catalog, _, courses = workbook_catalog
     # Every consecutive window of 25, covering all 74 original statements.
     for start in range(50):
         selection = [statement.id for statement in catalog.statements[start : start + 25]]
         result = calculate_scores(catalog, selection)
         by_course = {course.course_id: course for course in result.courses}
-        for first, second in (
-            ("Enfermagem", "Fisioterapia"),
-            ("Engenharia Civil", "Engenharia Mecânica"),
-        ):
-            a, b = by_course[courses[first]], by_course[courses[second]]
-            assert (a.score, a.is_recommended) == (b.score, b.is_recommended)
+        assert len(by_course) == 9
+        for name in ("Enfermagem e Fisioterapia", "Engenharia Civil e Mecânica"):
+            course_id = courses[name]
+            expected = sum(
+                any(link.course_id == course_id for link in statement.weights)
+                for statement in catalog.statements[start : start + 25]
+            )
+            assert by_course[course_id].score == expected

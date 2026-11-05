@@ -32,19 +32,11 @@ PSYCHOLOGY_INSTRUCTIONS = "Procure a equipe de Psicologia no SPA."
 PENDING_INSTRUCTIONS = (
     "Referência da planilha por área; confirmar localização e encaminhamento com a instituição."
 )
-# Expand only known labels. Splitting on 'e' would corrupt Arquitetura e Urbanismo.
-COURSE_LABELS = {
-    "Enfermagem e Fisioterapia": ("Enfermagem", "Fisioterapia"),
-    "Engenharia Civil e Mecânica": ("Engenharia Civil", "Engenharia Mecânica"),
-    "Arquitetura": ("Arquitetura e Urbanismo",),
-}
 EXPECTED_COURSES = {
-    "Enfermagem": "Saúde",
-    "Fisioterapia": "Saúde",
+    "Enfermagem e Fisioterapia": "Saúde",
     "Educação Física": "Saúde",
     "Psicologia": "Saúde",
-    "Engenharia Civil": "Engenharia",
-    "Engenharia Mecânica": "Engenharia",
+    "Engenharia Civil e Mecânica": "Engenharia",
     "Engenharia de Produção": "Engenharia",
     "Administração": "Negócios",
     "Direito": "Negócios",
@@ -185,7 +177,7 @@ def _parse_workbook(workbook, source_sha256: str) -> Catalog:
         courses[name] = CourseData(name, area)
         areas[area] = AreaData(area, destination)
     if set(courses) != set(EXPECTED_COURSES):
-        raise CatalogError("Tabela_Area: são obrigatórios os 11 cursos e as 5 áreas do catálogo.")
+        raise CatalogError("Tabela_Area: são obrigatórios os 9 cursos e as 5 áreas do catálogo.")
 
     rows = iter(_rows(workbook, "Tabela_Cursos", 4))
     _header(
@@ -210,13 +202,11 @@ def _parse_workbook(workbook, source_sha256: str) -> Catalog:
             if label is None:
                 continue
             label = _string(label, location)
-            expanded = COURSE_LABELS.get(label, (label,))
-            for name in expanded:
-                if name not in courses:
-                    raise CatalogError(f"{location}: rótulo de curso desconhecido: {label}.")
-                if name in linked:
-                    raise CatalogError(f"{location}: vínculo duplicado com {name}.")
-                linked.append(name)
+            if label not in courses:
+                raise CatalogError(f"{location}: rótulo de curso desconhecido: {label}.")
+            if label in linked:
+                raise CatalogError(f"{location}: vínculo duplicado com {label}.")
+            linked.append(label)
         numbers.add(number)
         texts.add(text_key)
         mapped_courses.update(linked)

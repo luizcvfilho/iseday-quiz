@@ -1,16 +1,18 @@
 import csv
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from io import StringIO
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.admin import management
 from app.admin.management_schemas import NewVersion
-from app.models import AdminAuditLog, QuizVersion, StatementCourseWeight
+from app.catalog import DEFAULT_WORKBOOK, CourseData, import_catalog, read_catalog
+from app.models import AdminAuditLog, Course, QuizVersion, StatementCourseWeight
 
 from .test_admin import admin as admin
 from .test_admin import login
@@ -160,7 +162,7 @@ def test_original_catalog_and_invalid_edits_are_atomic(api, admin):
     login(api)
     draft = create(api)
     assert draft["statement_count"] == 74
-    assert len(draft["areas"]) == 5 and len(draft["courses"]) == 11
+    assert len(draft["areas"]) == 5 and len(draft["courses"]) == 9
     data = payload(draft)
     data["areas"][0]["destination"] = "Must roll back"
     data["courses"][0]["id"] = str(uuid4())
@@ -190,6 +192,155 @@ def test_original_catalog_and_invalid_edits_are_atomic(api, admin):
     broken = api.client.get(f"/api/admin/versions/{draft['id']}").json()
     assert publication(api, broken).status_code == 422
     assert api.client.get("/api/quiz/current").json()["id"] == str(api.quiz.version)
+
+
+def legacy_version(api):
+    source = read_catalog(DEFAULT_WORKBOOK)
+    separate = {
+        "Enfermagem e Fisioterapia": ("Enfermagem", "Fisioterapia"),
+        "Engenharia Civil e Mecânica": ("Engenharia Civil", "Engenharia Mecânica"),
+    }
+    legacy = replace(
+        source,
+        courses=tuple(
+            CourseData(name, course.area)
+            for course in source.courses
+            for name in separate.get(course.name, (course.name,))
+        ),
+        statements=tuple(
+            replace(
+                statement,
+                courses=tuple(
+                    name for course in statement.courses for name in separate.get(course, (course,))
+                ),
+            )
+            for statement in source.statements
+        ),
+    )
+    return import_catalog(api.engine, legacy, version_number=2).version_id
+
+
+def test_copy_legacy_groups_courses_preserves_history_and_feedback(api, admin):
+    login(api)
+    legacy_id = legacy_version(api)
+    original = api.client.get(f"/api/admin/versions/{legacy_id}").json()
+    assert len(original["courses"]) == 11
+    assert publication(api, original).status_code == 200
+    assert register(api, quiz_version_id=str(legacy_id)).status_code == 201
+    ids = [UUID(s["id"]) for s in original["statements"][:25]]
+    before = submit(api, ids=ids).json()
+    assert len(before["courses"]) == 11
+
+    draft = create(api, str(legacy_id))
+    assert len(draft["courses"]) == 9
+    assert sum(len(s["courses"]) for s in draft["statements"]) == 78
+    assert draft["statements"][2]["courses"][0]["course"] == "Enfermagem e Fisioterapia"
+    assert draft["statements"][5]["courses"][0]["course"] == "Engenharia Civil e Mecânica"
+    assert publication(api, draft, expected_published_id=str(legacy_id)).status_code == 200
+    assert api.client.get("/api/participations/me/result").json() == before
+    assert len(api.client.get(f"/api/admin/versions/{legacy_id}").json()["courses"]) == 11
+
+    # A fresh participation sees a single recommendation and can choose that group.
+    assert api.client.post("/api/participations/me/end", headers=WRITE).status_code == 204
+    assert register(api, quiz_version_id=draft["id"]).status_code == 201
+    ids = [UUID(s["id"]) for s in draft["statements"][:25]]
+    result = submit(api, ids=ids)
+    assert result.status_code == 200, result.text
+    assert len(result.json()["courses"]) == 9
+    recommended = [c for c in result.json()["courses"] if c["is_recommended"]]
+    assert [(c["name"], c["score"]) for c in recommended] == [("Enfermagem e Fisioterapia", 8)]
+    feedback = api.client.post(
+        "/api/participations/me/feedback",
+        headers=WRITE,
+        json={"agrees_with_result": True, "chosen_course_id": recommended[0]["id"]},
+    )
+    assert feedback.status_code == 200, feedback.text
+    assert feedback.json()["chosen_course_id"] == recommended[0]["id"]
+    summary = api.client.get(f"/api/admin/summary?quiz_version_id={draft['id']}").json()
+    assert [c["name"] for c in summary["courses"]] == ["Enfermagem e Fisioterapia"]
+    assert "Enfermagem e Fisioterapia" in api.client.get("/api/admin/export.csv").text
+    # Copying an already grouped version keeps the same courses and weights.
+    copy = create(api, draft["id"])
+    assert len(copy["courses"]) == 9
+    assert [[(c["course"], c["weight"]) for c in s["courses"]] for s in copy["statements"]] == [
+        [(c["course"], c["weight"]) for c in s["courses"]] for s in draft["statements"]
+    ]
+
+
+def test_legacy_copy_unions_links_keeps_largest_weight_and_destination(api, admin):
+    login(api)
+    legacy_id = legacy_version(api)
+    with Session(api.engine) as session, session.begin():
+        courses = {
+            c.name: c.id
+            for c in session.scalars(select(Course).where(Course.quiz_version_id == legacy_id))
+        }
+        session.execute(
+            update(Course)
+            .where(Course.id.in_([courses["Enfermagem"], courses["Fisioterapia"]]))
+            .values(destination="Laboratório", destination_instructions="Procure a equipe.")
+        )
+        session.execute(
+            update(StatementCourseWeight)
+            .where(StatementCourseWeight.course_id == courses["Fisioterapia"])
+            .values(weight=4)
+        )
+        statement_id = session.scalar(
+            select(StatementCourseWeight.statement_id)
+            .where(StatementCourseWeight.course_id == courses["Fisioterapia"])
+            .limit(1)
+        )
+        session.execute(
+            delete(StatementCourseWeight).where(
+                StatementCourseWeight.course_id == courses["Fisioterapia"],
+                StatementCourseWeight.statement_id == statement_id,
+            )
+        )
+    draft = create(api, str(legacy_id))
+    group = next(c for c in draft["courses"] if c["name"] == "Enfermagem e Fisioterapia")
+    assert (group["destination"], group["destination_instructions"]) == (
+        "Laboratório",
+        "Procure a equipe.",
+    )
+    weights = [
+        c["weight"]
+        for s in draft["statements"]
+        for c in s["courses"]
+        if c["course_id"] == group["id"]
+    ]
+    assert sorted(weights) == [1] + [4] * 10
+
+
+@pytest.mark.parametrize("conflict", ["area", "destination"])
+def test_legacy_copy_conflicting_groups_rolls_back(api, admin, conflict):
+    login(api)
+    legacy_id = legacy_version(api)
+    with Session(api.engine) as session, session.begin():
+        other = session.scalar(
+            select(Course.area_id).where(
+                Course.quiz_version_id == legacy_id, Course.name == "Administração"
+            )
+        )
+        changes = (
+            {"area_id": other}
+            if conflict == "area"
+            else {"destination": "Outro local", "destination_instructions": "Outra equipe."}
+        )
+        session.execute(
+            update(Course)
+            .where(Course.quiz_version_id == legacy_id, Course.name == "Fisioterapia")
+            .values(**changes)
+        )
+    original = api.client.get(f"/api/admin/versions/{legacy_id}").json()
+    response = api.client.post(
+        "/api/admin/versions",
+        headers=WRITE,
+        json={"event_name": "Copy", "source_version_id": str(legacy_id)},
+    )
+    assert response.status_code == 422, response.text
+    assert "áreas ou destinos divergentes" in response.json()["detail"]
+    assert api.client.get(f"/api/admin/versions/{legacy_id}").json() == original
+    assert len(api.client.get("/api/admin/versions").json()) == 2
 
 
 def test_stale_save_and_concurrent_creation(api, admin):

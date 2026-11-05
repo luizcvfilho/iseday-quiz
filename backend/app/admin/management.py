@@ -30,6 +30,13 @@ from app.models import (
 from app.participants.service import load_scoring_catalog
 from app.scoring import ScoringConfigurationError, calculate_scores
 
+LEGACY_COURSE_GROUPS = {
+    "Enfermagem": "Enfermagem e Fisioterapia",
+    "Fisioterapia": "Enfermagem e Fisioterapia",
+    "Engenharia Civil": "Engenharia Civil e Mecânica",
+    "Engenharia Mecânica": "Engenharia Civil e Mecânica",
+}
+
 
 def version(session: Session, version_id: UUID, *, draft=False):
     item = session.get(QuizVersion, version_id, with_for_update=draft)
@@ -168,8 +175,59 @@ def create_version(session: Session, data: schema.NewVersion):
                     if key in values:
                         values[key] = mappings[values[key]]
                 session.execute(insert(model).values(**values))
+        _group_courses(session, item.id)
     session.flush()
     return version_detail(session, item.id)
+
+
+def _group_courses(session: Session, version_id: UUID):
+    """Consolidate legacy courses only in the newly copied draft."""
+    groups = {}
+    for course in session.scalars(
+        select(Course).where(Course.quiz_version_id == version_id).order_by(Course.name)
+    ):
+        name = LEGACY_COURSE_GROUPS.get(course.name, course.name)
+        groups.setdefault(name, []).append(course)
+    for name, courses in groups.items():
+        if len(courses) == 1 and courses[0].name == name:
+            continue
+        if len({(c.area_id, c.destination, c.destination_instructions) for c in courses}) != 1:
+            raise HTTPException(
+                422,
+                f"Não foi possível agrupar {name}: áreas ou destinos divergentes. "
+                "Ajuste os destinos em um rascunho antes de copiá-lo.",
+            )
+        target = next((c for c in courses if c.name == name), courses[0])
+        course_ids = [c.id for c in courses]
+        weights = {}
+        for link in session.scalars(
+            select(StatementCourseWeight).where(StatementCourseWeight.course_id.in_(course_ids))
+        ):
+            # A shared statement contributes once; retain the strongest existing weight.
+            weights[link.statement_id] = max(weights.get(link.statement_id, 0), link.weight)
+        session.execute(
+            delete(StatementCourseWeight).where(StatementCourseWeight.course_id.in_(course_ids))
+        )
+        session.execute(
+            delete(Course).where(Course.id.in_([c.id for c in courses if c.id != target.id]))
+        )
+        target.name = name
+        target.description = (
+            "\n\n".join(dict.fromkeys(c.description for c in courses if c.description)) or None
+        )
+        if weights:
+            session.execute(
+                insert(StatementCourseWeight),
+                [
+                    dict(
+                        quiz_version_id=version_id,
+                        statement_id=statement_id,
+                        course_id=target.id,
+                        weight=weight,
+                    )
+                    for statement_id, weight in weights.items()
+                ],
+            )
 
 
 def save_version(session: Session, version_id: UUID, data: schema.VersionInput):

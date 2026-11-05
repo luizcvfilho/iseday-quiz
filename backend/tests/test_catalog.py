@@ -10,7 +10,7 @@ from app.core.config import Settings
 def test_original_catalog_and_review_snapshot():
     catalog = read_catalog(DEFAULT_WORKBOOK)
     report = catalog.report()
-    assert report["counts"] == {"statements": 74, "courses": 11, "areas": 5, "links": 96}
+    assert report["counts"] == {"statements": 74, "courses": 9, "areas": 5, "links": 78}
     assert report["area_coverage"] == {
         "Saúde": 29,
         "Engenharia": 15,
@@ -18,15 +18,13 @@ def test_original_catalog_and_review_snapshot():
         "Educação": 7,
         "Arquitetura": 11,
     }
-    assert report["identical_course_mappings"] == [
-        ["Enfermagem", "Fisioterapia"],
-        ["Engenharia Civil", "Engenharia Mecânica"],
-    ]
-    assert catalog.statements[2].courses == ("Enfermagem", "Fisioterapia")
+    assert report["identical_course_mappings"] == []
+    assert report["course_coverage"]["Enfermagem e Fisioterapia"] == 11
+    assert report["course_coverage"]["Engenharia Civil e Mecânica"] == 7
+    assert catalog.statements[2].courses == ("Enfermagem e Fisioterapia",)
     assert catalog.statements[69].courses == (
         "Arquitetura e Urbanismo",
-        "Engenharia Civil",
-        "Engenharia Mecânica",
+        "Engenharia Civil e Mecânica",
     )
     assert catalog.statements[28].text == 'Colcar a "mão na massa"'
     assert catalog.statements[33].text == "Usar a instuição"
@@ -34,6 +32,26 @@ def test_original_catalog_and_review_snapshot():
     # The committed review artifact must describe the exact workbook and current rules.
     snapshot = DEFAULT_WORKBOOK.with_suffix(".json").read_text(encoding="utf-8")
     assert json.loads(snapshot) == json.loads(json.dumps(report))
+
+
+def test_workbook_uses_the_same_grouped_course_names_in_both_sheets():
+    catalog = read_catalog(DEFAULT_WORKBOOK)
+    course_names = {course.name for course in catalog.courses}
+    workbook = load_workbook(DEFAULT_WORKBOOK)
+    try:
+        area_names = [
+            row[0] for row in workbook["Tabela_Area"].iter_rows(min_row=2, values_only=True)
+        ]
+        statement_names = {
+            name
+            for row in workbook["Tabela_Cursos"].iter_rows(min_row=2, values_only=True)
+            for name in row[2:4]
+            if name is not None
+        }
+        assert len(area_names) == 9
+        assert set(area_names) == statement_names == course_names
+    finally:
+        workbook.close()
 
 
 @pytest.mark.parametrize(
@@ -47,12 +65,16 @@ def test_original_catalog_and_review_snapshot():
         ("Tabela_Cursos", "B3", None, "texto obrigatório"),
         ("Tabela_Cursos", "C3", None, "texto obrigatório"),
         ("Tabela_Cursos", "C3", "Curso novo", "desconhecido"),
-        ("Tabela_Cursos", "D4", "Fisioterapia", "vínculo duplicado"),
+        ("Tabela_Cursos", "D4", "Enfermagem e Fisioterapia", "vínculo duplicado"),
+        ("Tabela_Cursos", "C4", "Fisioterapia", "desconhecido"),
+        ("Tabela_Cursos", "C7", "Engenharia Civil", "desconhecido"),
         ("Tabela_Cursos", "B3", '=CONCAT("texto")', "fórmulas"),
         ("Tabela_Cursos", "E3", "conteúdo extra", "coluna inesperada"),
         ("Tabela_Cursos", "C1", "Outro cabeçalho", "cabeçalho"),
-        ("Tabela_Area", "A3", "Enfermagem", "duplicado"),
-        ("Tabela_Area", "B8", "Negócios", "divergente"),
+        ("Tabela_Area", "A3", "Enfermagem e Fisioterapia", "duplicado"),
+        ("Tabela_Area", "A2", "Enfermagem", "desconhecido"),
+        ("Tabela_Area", "A5", "Engenharia Mecânica", "desconhecido"),
+        ("Tabela_Area", "B5", "Negócios", "divergente"),
         ("Tabela_Area", "C3", "Destino diferente", "destinos divergentes"),
     ],
 )
@@ -100,7 +122,7 @@ def test_validation_cli_needs_no_database(monkeypatch, tmp_path, capsys):
     output = tmp_path / "review.json"
     assert main(["validate", "--report", str(output)]) == 0
     assert json.loads(output.read_text(encoding="utf-8"))["status"] == "draft"
-    assert '"links": 96' in capsys.readouterr().out
+    assert '"links": 78' in capsys.readouterr().out
 
 
 def test_failed_validation_does_not_write_report(tmp_path, capsys):

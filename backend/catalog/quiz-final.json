@@ -1,6 +1,6 @@
 {
   "source_file": "QUIZ FINAL.xlsx",
-  "source_sha256": "9fb2fca9d7ebda3c8a42bf9ce46d0c5299fdd11384a1f6426a7a15e99b6adb50",
+  "source_sha256": "e7ae8928995fb6716264208c761d390bdeb63c37454629151ab3f85d6e2114eb",
   "areas": [
     {
       "name": "Arquitetura",
@@ -41,24 +41,16 @@
       "area": "Saúde"
     },
     {
-      "name": "Enfermagem",
+      "name": "Enfermagem e Fisioterapia",
       "area": "Saúde"
     },
     {
-      "name": "Engenharia Civil",
-      "area": "Engenharia"
-    },
-    {
-      "name": "Engenharia Mecânica",
+      "name": "Engenharia Civil e Mecânica",
       "area": "Engenharia"
     },
     {
       "name": "Engenharia de Produção",
       "area": "Engenharia"
-    },
-    {
-      "name": "Fisioterapia",
-      "area": "Saúde"
     },
     {
       "name": "Pedagogia",
@@ -92,8 +84,7 @@
       "display_order": 3,
       "text": "Preocupar-se com os outros",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -109,8 +100,7 @@
       "display_order": 5,
       "text": "Ajudar",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -118,8 +108,7 @@
       "display_order": 6,
       "text": "Usar a lógica",
       "courses": [
-        "Engenharia Civil",
-        "Engenharia Mecânica"
+        "Engenharia Civil e Mecânica"
       ]
     },
     {
@@ -127,8 +116,7 @@
       "display_order": 7,
       "text": "Demonstrar carinho e afeto",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -152,8 +140,7 @@
       "display_order": 10,
       "text": "Assumir responsabilidades pelos outros",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -185,8 +172,7 @@
       "display_order": 14,
       "text": "Apoiar os outros",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -202,8 +188,7 @@
       "display_order": 16,
       "text": "cuidar da aparência",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -251,8 +236,7 @@
       "display_order": 22,
       "text": "Consolar as pessoas",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -260,8 +244,7 @@
       "display_order": 23,
       "text": "Auxiliar pessoas",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -301,8 +284,7 @@
       "display_order": 28,
       "text": "Ser prático e realista",
       "courses": [
-        "Engenharia Civil",
-        "Engenharia Mecânica"
+        "Engenharia Civil e Mecânica"
       ]
     },
     {
@@ -310,8 +292,7 @@
       "display_order": 29,
       "text": "Colcar a \"mão na massa\"",
       "courses": [
-        "Engenharia Civil",
-        "Engenharia Mecânica"
+        "Engenharia Civil e Mecânica"
       ]
     },
     {
@@ -407,8 +388,7 @@
       "display_order": 41,
       "text": "Manter proximidade corporal com as pessoas",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -432,8 +412,7 @@
       "display_order": 44,
       "text": "Atender às necessidades dos outros",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -497,8 +476,7 @@
       "display_order": 52,
       "text": "Resolver problemas",
       "courses": [
-        "Engenharia Civil",
-        "Engenharia Mecânica"
+        "Engenharia Civil e Mecânica"
       ]
     },
     {
@@ -506,8 +484,7 @@
       "display_order": 53,
       "text": "Usar equipamentos, novas tecnologias",
       "courses": [
-        "Engenharia Civil",
-        "Engenharia Mecânica"
+        "Engenharia Civil e Mecânica"
       ]
     },
     {
@@ -547,8 +524,7 @@
       "display_order": 58,
       "text": "Trabalhar com coisas concretas",
       "courses": [
-        "Engenharia Civil",
-        "Engenharia Mecânica"
+        "Engenharia Civil e Mecânica"
       ]
     },
     {
@@ -647,8 +623,7 @@
       "text": "Ligado à construção",
       "courses": [
         "Arquitetura e Urbanismo",
-        "Engenharia Civil",
-        "Engenharia Mecânica"
+        "Engenharia Civil e Mecânica"
       ]
     },
     {
@@ -664,8 +639,7 @@
       "display_order": 72,
       "text": "Manipular substâncias",
       "courses": [
-        "Enfermagem",
-        "Fisioterapia"
+        "Enfermagem e Fisioterapia"
       ]
     },
     {
@@ -694,9 +668,9 @@
   "area_destination_instructions": "Referência da planilha por área; confirmar localização e encaminhamento com a instituição.",
   "counts": {
     "statements": 74,
-    "courses": 11,
+    "courses": 9,
     "areas": 5,
-    "links": 96
+    "links": 78
   },
   "area_coverage": {
     "Arquitetura": 11,
@@ -710,24 +684,13 @@
     "Arquitetura e Urbanismo": 11,
     "Direito": 8,
     "Educação Física": 8,
-    "Enfermagem": 11,
-    "Engenharia Civil": 7,
-    "Engenharia Mecânica": 7,
+    "Enfermagem e Fisioterapia": 11,
+    "Engenharia Civil e Mecânica": 7,
     "Engenharia de Produção": 8,
-    "Fisioterapia": 11,
     "Pedagogia": 7,
     "Psicologia": 10
   },
-  "identical_course_mappings": [
-    [
-      "Enfermagem",
-      "Fisioterapia"
-    ],
-    [
-      "Engenharia Civil",
-      "Engenharia Mecânica"
-    ]
-  ],
+  "identical_course_mappings": [],
   "review_notes": [
     "Rascunho: catálogo, textos, metodologia, pesos e destinos aguardam validação institucional.",
     "A planilha contém 74 afirmativas; o PDF menciona 82. As fontes não foram mescladas.",

@@ -28,13 +28,14 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.getByRole('button', { name: 'Revisar escolhas' }).click()
   await page.getByRole('button', { name: 'Confirmar 25 escolhas' }).click()
   await expect(page.getByRole('heading', { name: 'Saúde', exact: true })).toBeVisible()
-  await expect(page.getByText('Enfermagem', { exact: true })).toBeVisible()
-  await expect(page.getByText('Fisioterapia', { exact: true })).toBeVisible()
+  await expect(page.getByText('Enfermagem e Fisioterapia', { exact: true })).toBeVisible()
+  await expect(page.getByText('Enfermagem', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Fisioterapia', { exact: true })).toHaveCount(0)
   await page.screenshot({ path: testInfo.outputPath('resultado-desktop.png'), fullPage: true })
   await page.getByRole('radio', { name: 'Sim, faz sentido' }).check()
   await page
     .getByLabel('Qual curso você quer conhecer?')
-    .selectOption({ label: 'Enfermagem · Saúde' })
+    .selectOption({ label: 'Enfermagem e Fisioterapia · Saúde' })
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
   await expect(page.getByRole('heading', { name: 'Vamos conhecer de perto?' })).toBeVisible()
   await page.screenshot({
@@ -76,8 +77,8 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   ).toBeVisible()
   await expect(
     page.getByRole('table', { name: 'Pontuação por curso' }).getByText('Sugerido'),
-  ).toHaveCount(2)
-  await expect(page.getByText('Curso escolhido: Enfermagem')).toBeVisible()
+  ).toHaveCount(1)
+  await expect(page.getByText('Curso escolhido: Enfermagem e Fisioterapia')).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('admin-detalhe.png'), fullPage: true })
   await page.getByRole('link', { name: 'Versões e destinos' }).click()
   await page.getByRole('button', { name: 'Copiar versão 1' }).click()
@@ -120,7 +121,7 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.getByRole('button', { name: 'Exportar resultados filtrados (CSV)' }).click()
   await (await download).saveAs(testInfo.outputPath('participacoes.csv'))
   await page.getByRole('link', { name: 'Ver resultado de Aluno fictício para teste' }).click()
-  await expect(page.getByText('Curso escolhido: Enfermagem')).toBeVisible()
+  await expect(page.getByText('Curso escolhido: Enfermagem e Fisioterapia')).toBeVisible()
   await page.getByRole('button', { name: 'Sair', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Entrar na administração' })).toBeVisible()
   expect((await page.request.get('/api/admin/me')).status()).toBe(401)
