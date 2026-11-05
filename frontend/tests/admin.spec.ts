@@ -18,7 +18,7 @@ const courses = [
 const row = {
   id: 'p1',
   full_name: 'Ana de Teste',
-  school: { id: 'school-1', name: 'Escola de teste' },
+  school_name: 'Escola de teste',
   quiz_version_id: 'v1',
   version_number: 1,
   status: 'completed',
@@ -37,7 +37,7 @@ const summary = {
   agreed: 1,
   disagreed: 0,
   agreement_rate: 100,
-  schools: [{ ...row.school, count: 1 }],
+  schools: [{ name: row.school_name, count: 1 }],
   areas: areas.map((a) => ({ ...a, count: 1 })),
   courses: courses.map((c) => ({ ...c, count: 1 })),
 }
@@ -70,7 +70,7 @@ async function mockAdmin(page: Page, authenticated = false) {
     if (url.pathname === '/api/admin/me') return reply(200, admin)
     if (url.pathname === '/api/admin/options')
       return reply(200, {
-        schools: [row.school],
+        schools: [row.school_name],
         versions: [{ id: 'v1', name: 'ISE Day', version_number: 1 }],
         areas: areas.map((a) => ({ ...a, quiz_version_id: 'v1' })),
         courses: courses.map((c) => ({ ...c, quiz_version_id: 'v1' })),

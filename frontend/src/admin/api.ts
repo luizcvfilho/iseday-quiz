@@ -5,7 +5,7 @@ import type { Participant, Result, Statement } from '../api'
 export type Named = { id: string; name: string }
 export type Admin = Named & { email: string; expires_at: string }
 export type AdminOptions = {
-  schools: Named[]
+  schools: string[]
   versions: (Named & { version_number: number })[]
   areas: (Named & { quiz_version_id: string })[]
   courses: (Named & { quiz_version_id: string })[]
@@ -13,7 +13,7 @@ export type AdminOptions = {
 export type ParticipationRow = {
   id: string
   full_name: string
-  school: Named
+  school_name: string
   quiz_version_id: string
   version_number: number
   status: Participant['status']
@@ -47,11 +47,10 @@ export type Summary = {
   agreed: number
   disagreed: number
   agreement_rate: number | null
-  schools: Count[]
+  schools: { name: string; count: number }[]
   areas: Count[]
   courses: Count[]
 }
-export type ManagedSchool = Named & { city: string; state_code: string; is_active: boolean }
 export type QuizVersion = {
   id: string
   event_name: string
@@ -104,8 +103,6 @@ export const adminApi = {
       undefined,
       signal,
     ),
-  saveSchool: (data: Omit<ManagedSchool, 'id'>, id?: string) =>
-    request<ManagedSchool>(`/admin/schools${id ? `/${encodeURIComponent(id)}` : ''}`, data),
   createVersion: (event_name: string, source_version_id: string | null) =>
     request<VersionDetail>('/admin/versions', { event_name, source_version_id }),
   saveVersion: (id: string, data: VersionForm, expected_revision: string) =>

@@ -31,19 +31,6 @@ class CreatedAt:
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class School(UUIDPrimaryKey, CreatedAt, Base):
-    __tablename__ = "schools"
-    __table_args__ = (
-        CheckConstraint("btrim(name) <> ''", name="name_nonempty"),
-        Index("ix_schools_name", func.lower(text("name"))),
-    )
-
-    name: Mapped[str] = mapped_column(Text)
-    city: Mapped[str | None] = mapped_column(Text)
-    state_code: Mapped[str | None] = mapped_column(String(2))
-    is_active: Mapped[bool] = mapped_column(server_default=text("true"))
-
-
 class AdminUser(UUIDPrimaryKey, CreatedAt, Base):
     __tablename__ = "admin_users"
     __table_args__ = (
@@ -187,6 +174,7 @@ class Participation(UUIDPrimaryKey, Base):
     __tablename__ = "participations"
     __table_args__ = (
         UniqueConstraint("id", "quiz_version_id"),
+        CheckConstraint("btrim(school_name) <> ''", name="school_name_nonempty"),
         CheckConstraint("btrim(full_name) <> ''", name="full_name_nonempty"),
         CheckConstraint(r"phone ~ '^\+55[1-9][0-9][0-9]{8,9}$'", name="phone_format"),
         CheckConstraint("btrim(email) <> ''", name="email_nonempty"),
@@ -211,13 +199,13 @@ class Participation(UUIDPrimaryKey, Base):
             name="completion_after_submission",
         ),
         Index("ix_participations_started", text("started_at DESC"), "id"),
-        Index("ix_participations_school", "school_id", text("started_at DESC")),
+        Index("ix_participations_school", "school_name", text("started_at DESC")),
         Index("ix_participations_status", "status", text("started_at DESC")),
         Index("ix_participations_version", "quiz_version_id"),
     )
 
     quiz_version_id: Mapped[UUID] = mapped_column(ForeignKey("quiz_versions.id"))
-    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id"))
+    school_name: Mapped[str] = mapped_column(Text)
     full_name: Mapped[str] = mapped_column(Text)
     phone: Mapped[str] = mapped_column(String(14))
     email: Mapped[str] = mapped_column(Text)

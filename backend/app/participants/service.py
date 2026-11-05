@@ -19,7 +19,6 @@ from app.models import (
     ParticipationFeedback,
     ParticipationSelection,
     QuizVersion,
-    School,
     Statement,
     StatementCourseWeight,
 )
@@ -138,13 +137,6 @@ def register(
     )
     if version is None:
         raise HTTPException(409, "Essa versão do quiz não está disponível. Atualize a página.")
-    school = session.scalar(
-        select(School)
-        .where(School.id == data.school_id, School.is_active.is_(True))
-        .with_for_update(read=True)
-    )
-    if school is None:
-        raise HTTPException(422, "Selecione uma escola ativa da lista.")
     now = session.scalar(select(func.clock_timestamp()))
     token = secrets.token_urlsafe(32)
     participant = Participation(

@@ -207,8 +207,8 @@ def test_filters_apply_equally_to_list_and_summary(api, admin):
         ({"agreement": "yes"}, ids[:1]),
         ({"agreement": "no"}, ids[1:2]),
         ({"agreement": "pending"}, ids[2:]),
-        ({"school_id": str(api.school)}, ids),
-        ({"school_id": str(uuid4())}, []),
+        ({"school_name": "Test school"}, ids),
+        ({"school_name": "Unknown school"}, []),
         ({"quiz_version_id": str(api.quiz.version)}, ids),
         ({"area_id": str(api.quiz.areas[0])}, ids[:3]),
         ({"course_id": str(api.quiz.courses[2])}, ids[:3]),
@@ -241,7 +241,7 @@ def test_archived_historical_result_and_options(api, admin):
         db.execute(update(QuizVersion).values(status="archived"))
     login(api)
     options = api.client.get("/api/admin/options").json()
-    assert options["schools"][0]["id"] == str(api.school)
+    assert options["schools"] == ["Test school"]
     assert options["versions"][0]["id"] == str(api.quiz.version)
     assert len(options["areas"]) == 2 and len(options["courses"]) == 3
     assert api.client.get(f"/api/admin/participations/{ids[0]}").json()["result"] is not None
@@ -278,3 +278,31 @@ def test_period_includes_whole_days_in_brasilia(api, admin):
         result = api.client.get("/api/admin/participations", params=query)
         assert [row["id"] for row in result.json()["items"]] == [expected]
         assert api.client.get("/api/admin/summary", params=query).json()["total"] == 1
+
+
+def test_free_text_schools_in_reports_filters_and_csv(api, admin):
+    names = ["Colégio São João", "Colégio São João", "Escola Livre & Nova"]
+    ids = []
+    for name in names:
+        api.client.cookies.clear()
+        response = register(api, school_name=name)
+        assert response.status_code == 201
+        ids.append(response.json()["id"])
+    login(api)
+    assert api.client.get("/api/admin/options").json()["schools"] == sorted(set(names))
+    summary = api.client.get("/api/admin/summary").json()
+    assert summary["schools"] == [{"name": names[0], "count": 2}, {"name": names[2], "count": 1}]
+    params = {"school_name": names[2]}
+    listing = api.client.get("/api/admin/participations", params=params).json()
+    assert [p["id"] for p in listing["items"]] == ids[2:]
+    assert listing["items"][0]["school_name"] == names[2]
+    assert api.client.get("/api/admin/summary", params=params).json()["total"] == 1
+    detail = api.client.get(f"/api/admin/participations/{ids[2]}").json()
+    assert detail["school_name"] == names[2]
+    exported = api.client.get("/api/admin/export.csv", params=params)
+    assert names[2] in exported.text and names[0] not in exported.text
+    assert api.client.get("/api/admin/schools").status_code == 404
+    assert (
+        api.client.post("/api/admin/schools", headers=WRITE, json={"name": "Escola"}).status_code
+        == 404
+    )

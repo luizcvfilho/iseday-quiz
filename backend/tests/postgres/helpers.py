@@ -13,7 +13,6 @@ from app.models import (
     ParticipationFeedback,
     ParticipationSelection,
     QuizVersion,
-    School,
     Statement,
     StatementCourseWeight,
 )
@@ -107,12 +106,11 @@ def catalog(db, *, number=1, count=26, publish=True):
 
 
 def participation(db, quiz):
-    school = db.scalar(insert(School).values(name="Test school").returning(School.id))
     return db.scalar(
         insert(Participation)
         .values(
             quiz_version_id=quiz.version,
-            school_id=school,
+            school_name="Test school",
             full_name="Test participant",
             phone="+5511999999999",
             email="participant@example.org",

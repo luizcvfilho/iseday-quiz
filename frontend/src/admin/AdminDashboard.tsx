@@ -32,7 +32,7 @@ import { AdminExport } from './AdminExport'
 
 type FilterState = Record<
   | 'q'
-  | 'school_id'
+  | 'school_name'
   | 'quiz_version_id'
   | 'status'
   | 'area_id'
@@ -44,7 +44,7 @@ type FilterState = Record<
 >
 const empty: FilterState = {
   q: '',
-  school_id: '',
+  school_name: '',
   quiz_version_id: '',
   status: '',
   area_id: '',
@@ -216,7 +216,11 @@ export function AdminDashboard() {
             fullWidth
             slotProps={{ htmlInput: { maxLength: 200 } }}
           />
-          {select('school_id', 'Escola', options?.schools ?? [])}
+          {select(
+            'school_name',
+            'Escola',
+            options?.schools.map((name) => ({ id: name, name })) ?? [],
+          )}
           {select(
             'quiz_version_id',
             'Versão do quiz',
@@ -424,7 +428,7 @@ export function AdminDashboard() {
                       <TableCell>
                         <Typography sx={{ fontWeight: 600 }}>{row.full_name}</Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {row.school.name}
+                          {row.school_name}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           Versão {row.version_number}
@@ -522,7 +526,13 @@ export function AdminDashboard() {
   )
 }
 
-function Distribution({ title, items }: { title: string; items: Count[] }) {
+function Distribution({
+  title,
+  items,
+}: {
+  title: string
+  items: (Omit<Count, 'id'> & { id?: string })[]
+}) {
   return (
     <Accordion variant="outlined" disableGutters sx={{ alignSelf: 'start' }}>
       <AccordionSummary expandIcon={<ExpandMoreRounded />}>
@@ -536,7 +546,7 @@ function Distribution({ title, items }: { title: string; items: Count[] }) {
             {items.map((item) => (
               <Stack
                 component="li"
-                key={item.id}
+                key={item.id ?? item.name}
                 direction="row"
                 spacing={2}
                 sx={{ justifyContent: 'space-between' }}

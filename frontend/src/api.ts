@@ -7,7 +7,6 @@ export type Quiz = {
   statements: Statement[]
 }
 export type CurrentQuiz = Quiz & { privacy_notice_version: string; privacy_notice_text: string }
-export type School = { id: string; name: string; city: string | null; state_code: string | null }
 export type Participant = {
   id: string
   quiz_version_id: string
@@ -43,7 +42,7 @@ export type Result = {
 }
 export type Registration = {
   quiz_version_id: string
-  school_id: string
+  school_name: string
   full_name: string
   phone: string
   email: string
@@ -104,8 +103,6 @@ export const api = {
   current: () => request<CurrentQuiz>('/quiz/current'),
   me: () => request<Participant>('/participations/me'),
   quiz: () => request<Quiz>('/participations/me/quiz'),
-  schools: (q: string, signal: AbortSignal) =>
-    request<School[]>(`/schools?q=${encodeURIComponent(q)}&limit=100`, undefined, signal),
   register: (data: Registration) => request<Participant>('/participations', data),
   submit: (ids: string[]) => request<Result>('/participations/me/submit', { statement_ids: ids }),
   result: () => request<Result>('/participations/me/result'),

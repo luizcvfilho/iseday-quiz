@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from fastapi.testclient import TestClient
-from sqlalchemy import event, func, insert, select, update
+from sqlalchemy import event, func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -21,7 +21,6 @@ from app.models import (
     ParticipationFeedback,
     ParticipationSelection,
     QuizVersion,
-    School,
 )
 from app.participants import service
 from app.participants.security import token_hash
@@ -54,7 +53,6 @@ def api(empty_database, request):
         db.execute(
             update(QuizVersion).where(QuizVersion.id == quiz.version).values(status="published")
         )
-        school = db.scalar(insert(School).values(name="Test school").returning(School.id))
     settings = Settings(
         app_env="test",
         database_url="postgresql+psycopg://unused:unused@localhost/unused_test",
@@ -71,7 +69,7 @@ def api(empty_database, request):
     app.dependency_overrides[get_session] = database
     payload = dict(
         quiz_version_id=str(quiz.version),
-        school_id=str(school),
+        school_name="Test school",
         full_name="Test Student",
         phone="+5511999999999",
         email="student@example.org",
@@ -83,7 +81,6 @@ def api(empty_database, request):
             engine=engine,
             app=app,
             quiz=quiz,
-            school=school,
             payload=payload,
             settings=settings,
         )
@@ -116,7 +113,7 @@ def counts(api):
         ]
 
 
-def test_public_quiz_and_schools_do_not_expose_weights(api):
+def test_public_quiz_does_not_expose_weights(api):
     response = api.client.get("/api/quiz/current")
     assert response.status_code == 200
     body = response.json()
@@ -127,14 +124,6 @@ def test_public_quiz_and_schools_do_not_expose_weights(api):
     assert [s["display_order"] for s in body["statements"]] == list(range(1, 27))
     assert all(set(s) == {"id", "display_order", "text"} for s in body["statements"])
     assert "course" not in response.text and "weight" not in response.text
-    with api.engine.begin() as db:
-        db.execute(insert(School).values(name="Inactive", is_active=False))
-        db.execute(insert(School).values(name="School 100%"))
-    assert len(api.client.get("/api/schools").json()) == 2
-    assert len(api.client.get("/api/schools?q=TEST").json()) == 1
-    assert len(api.client.get("/api/schools?q=%25").json()) == 1
-    assert len(api.client.get("/api/schools?limit=1").json()) == 1
-    assert api.client.get("/api/schools?limit=101").status_code == 422
 
 
 def test_registration_sets_hashed_expiring_session_and_can_be_retried(api):
@@ -152,6 +141,7 @@ def test_registration_sets_hashed_expiring_session_and_can_be_retried(api):
         assert participant.access_token_hash == token_hash(token)
         assert participant.access_expires_at - participant.started_at == timedelta(hours=1)
         assert participant.privacy_notice_version == "test-v1"
+        assert participant.school_name == "Test school"
     retry = register(api)
     assert retry.status_code == 200 and retry.json() == body
     assert register(api, full_name="Different student").status_code == 409
@@ -176,6 +166,9 @@ def test_production_uses_secure_host_cookie(api):
         ("email", "invalid", 422),
         ("phone", "11999999999", 422),
         ("full_name", " ", 422),
+        ("school_name", " ", 422),
+        ("school_name", "x" * 201, 422),
+        ("school_name", None, 422),
         ("school_id", str(uuid4()), 422),
         ("quiz_version_id", str(uuid4()), 409),
         ("privacy_notice_version", "old-notice", 409),
@@ -188,10 +181,7 @@ def test_rejects_invalid_registration_without_creating_records(api, field, value
         assert db.scalar(select(func.count()).select_from(Participation)) == 0
 
 
-def test_rejects_inactive_school_and_missing_notice(api):
-    with api.engine.begin() as db:
-        db.execute(update(School).where(School.id == api.school).values(is_active=False))
-    assert register(api).status_code == 422
+def test_rejects_missing_notice(api):
     api.settings.privacy_notice_text = None
     assert register(api).status_code == 503
     assert api.client.get("/api/quiz/current").status_code == 503
@@ -621,3 +611,16 @@ def test_concurrent_feedback_persists_one_confirmation(api, different):
     assert saved["status"] == "completed"
     assert all(body == saved["feedback"] for status, body in responses if status == 200)
     assert feedback_count(api) == 1 and counts(api) == [25, 2, 3]
+
+
+def test_free_text_school_is_trimmed_saved_and_used_for_registration_retries(api):
+    response = register(api, school_name="  Colégio Livre São João  ")
+    assert response.status_code == 201
+    with Session(api.engine) as session:
+        participant = session.get(Participation, UUID(response.json()["id"]))
+        assert participant.school_name == "Colégio Livre São João"
+    assert register(api, school_name="Colégio Livre São João").status_code == 200
+    assert register(api, school_name="Outra escola").status_code == 409
+    payload = {key: value for key, value in api.payload.items() if key != "school_name"}
+    assert api.client.post("/api/participations", headers=WRITE, json=payload).status_code == 422
+    assert api.client.get("/api/schools").status_code == 404

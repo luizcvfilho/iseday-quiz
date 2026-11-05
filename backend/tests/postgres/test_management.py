@@ -73,12 +73,9 @@ def publication(api, version, **changes):
 
 def test_management_requires_admin_and_csrf(api, admin):
     register(api)
-    body = {"name": "Fictional school"}
-    for path in ("schools", "versions", f"versions/{api.quiz.version}", "export.csv"):
+    for path in ("versions", f"versions/{api.quiz.version}", "export.csv"):
         assert api.client.get(f"/api/admin/{path}").status_code == 401
     for path, data in (
-        ("schools", body),
-        (f"schools/{api.school}", body),
         ("versions", {"event_name": "Event"}),
         (f"versions/{api.quiz.version}", {"event_name": "Event"}),
         (f"versions/{api.quiz.version}/archive", {}),
@@ -87,7 +84,6 @@ def test_management_requires_admin_and_csrf(api, admin):
         assert api.client.post(f"/api/admin/{path}", json=data, headers=WRITE).status_code == 401
     assert login(api).status_code == 200
     for path, data in (
-        ("schools", body),
         ("versions", {"event_name": "Event"}),
         (f"versions/{api.quiz.version}/archive", {}),
     ):
@@ -98,41 +94,6 @@ def test_management_requires_admin_and_csrf(api, admin):
             ).status_code
             == 403
         )
-
-
-def test_school_creation_edit_deactivation_keeps_history(api, admin):
-    login(api)
-    created = api.client.post(
-        "/api/admin/schools",
-        headers=WRITE,
-        json={"name": "  Escola Nova  ", "city": "Campos", "state_code": "RJ"},
-    )
-    assert created.status_code == 201, created.text
-    school = created.json()
-    assert school["name"] == "Escola Nova" and school["is_active"]
-    assert register(api, school_id=school["id"]).status_code == 201
-    updated = api.client.post(
-        f"/api/admin/schools/{school['id']}",
-        headers=WRITE,
-        json={"name": school["name"], "is_active": False},
-    )
-    assert updated.status_code == 200, updated.text
-    assert not updated.json()["is_active"]
-    assert api.client.get("/api/admin/schools?q=escola nova").json() == [updated.json()]
-    assert school["id"] not in [s["id"] for s in api.client.get("/api/schools").json()]
-    assert submit(api).status_code == 200
-    pid = api.client.get("/api/participations/me").json()["id"]
-    assert api.client.get(f"/api/admin/participations/{pid}").json()["school"]["id"] == school["id"]
-    assert (
-        api.client.post("/api/admin/schools", headers=WRITE, json={"name": " "}).status_code == 422
-    )
-    assert (
-        api.client.post(
-            f"/api/admin/schools/{uuid4()}", headers=WRITE, json={"name": "Absent"}
-        ).status_code
-        == 404
-    )
-    assert "no-store" in created.headers["cache-control"]
 
 
 def test_create_clone_edit_publish_and_history(api, admin):

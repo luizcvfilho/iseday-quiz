@@ -14,17 +14,6 @@ class Input(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class SchoolInput(Input):
-    name: Name
-    city: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] = ""
-    state_code: Annotated[str, StringConstraints(pattern=r"^([A-Z]{2})?$")] = ""
-    is_active: bool = Field(default=True, strict=True)
-
-
-class SchoolItem(SchoolInput):
-    id: UUID
-
-
 class NewVersion(Input):
     event_name: Name
     source_version_id: UUID | None = None

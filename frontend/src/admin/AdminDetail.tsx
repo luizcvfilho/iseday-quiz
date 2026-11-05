@@ -127,7 +127,7 @@ export function AdminDetail() {
             >
               {(
                 [
-                  ['Escola', data.school.name],
+                  ['Escola', data.school_name],
                   ['E-mail', data.email],
                   ['Telefone', data.phone],
                   ['Início', dateTime(data.started_at)],

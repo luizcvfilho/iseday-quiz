@@ -6,7 +6,6 @@ import { StatusScreen } from './components/Presentation'
 import { AdminLogin, AdminProvider, RequireAdmin } from './admin/AdminAccess'
 import { AdminDashboard } from './admin/AdminDashboard'
 import { AdminDetail } from './admin/AdminDetail'
-import { AdminSchools } from './admin/AdminSchools'
 import { AdminVersions } from './admin/AdminVersions'
 import { AdminVersionDetail } from './admin/AdminVersionDetail'
 
@@ -18,7 +17,6 @@ function App() {
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route element={<RequireAdmin />}>
           <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/schools" element={<AdminSchools />} />
           <Route path="/admin/versions" element={<AdminVersions />} />
           <Route path="/admin/versions/:id" element={<AdminVersionDetail />} />
           <Route path="/admin/participations/:id" element={<AdminDetail />} />

@@ -16,6 +16,7 @@ from app.admin.schemas import (
     ParticipationDetail,
     ParticipationPage,
     ParticipationRow,
+    SchoolCount,
     Summary,
     VersionItem,
 )
@@ -28,7 +29,6 @@ from app.models import (
     ParticipationFeedback,
     ParticipationSelection,
     QuizVersion,
-    School,
     Statement,
 )
 from app.participants.schemas import PublicStatement
@@ -41,7 +41,7 @@ def filtered_ids(filters: Filters):
     query = select(Participation.id)
     if filters.q.strip():
         query = query.where(Participation.full_name.icontains(filters.q.strip(), autoescape=True))
-    for field in ("school_id", "quiz_version_id", "status"):
+    for field in ("school_name", "quiz_version_id", "status"):
         value = getattr(filters, field)
         if value is not None:
             query = query.where(getattr(Participation, field) == value)
@@ -85,10 +85,11 @@ def filtered_ids(filters: Filters):
 
 def options(session: Session) -> Options:
     return Options(
-        schools=[
-            NamedItem(id=s.id, name=s.name)
-            for s in session.scalars(select(School).order_by(School.name))
-        ],
+        schools=list(
+            session.scalars(
+                select(Participation.school_name).distinct().order_by(Participation.school_name)
+            )
+        ),
         versions=[
             VersionItem(id=v.id, name=v.event_name, version_number=v.version_number)
             for v in session.scalars(
@@ -107,8 +108,7 @@ def options(session: Session) -> Options:
 
 def rows(session: Session, query) -> list[ParticipationRow]:
     records = session.execute(
-        select(Participation, School, QuizVersion, ParticipationFeedback.agrees_with_result)
-        .join(School, School.id == Participation.school_id)
+        select(Participation, QuizVersion, ParticipationFeedback.agrees_with_result)
         .join(QuizVersion, QuizVersion.id == Participation.quiz_version_id)
         .outerjoin(
             ParticipationFeedback, ParticipationFeedback.participation_id == Participation.id
@@ -134,7 +134,7 @@ def rows(session: Session, query) -> list[ParticipationRow]:
         ParticipationRow(
             id=p.id,
             full_name=p.full_name,
-            school=NamedItem(id=school.id, name=school.name),
+            school_name=p.school_name,
             quiz_version_id=p.quiz_version_id,
             version_number=version.version_number,
             status=p.status,
@@ -145,7 +145,7 @@ def rows(session: Session, query) -> list[ParticipationRow]:
             winning_areas=areas[p.id],
             recommended_courses=courses[p.id],
         )
-        for p, school, version, agreement in records
+        for p, version, agreement in records
     ]
 
 
@@ -203,11 +203,10 @@ def summary(session: Session, filters: Filters):
     )
     agreed, disagreed = feedback.get(True, 0), feedback.get(False, 0)
     schools = session.execute(
-        select(School.id, School.name, func.count().label("count"))
-        .join(Participation, Participation.school_id == School.id)
+        select(Participation.school_name, func.count().label("count"))
         .where(Participation.id.in_(select(ids.c.id)))
-        .group_by(School.id)
-        .order_by(func.count().desc(), School.name, School.id)
+        .group_by(Participation.school_name)
+        .order_by(func.count().desc(), Participation.school_name)
     )
     groups = {}
     for name, model, entity, key, flag in (
@@ -238,6 +237,6 @@ def summary(session: Session, filters: Filters):
         agreement_rate=round(100 * agreed / (agreed + disagreed), 1)
         if agreed + disagreed
         else None,
-        schools=[CountItem(id=id, name=name, count=count) for id, name, count in schools],
+        schools=[SchoolCount(name=name, count=count) for name, count in schools],
         **groups,
     )

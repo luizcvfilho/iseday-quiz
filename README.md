@@ -24,7 +24,7 @@ make run
 
 Esse comando cria `.env` a partir de `.env.example` se necessário e inicia PostgreSQL, API e frontend com Docker Compose, reconstruindo as imagens. Revise as configurações locais antes de iniciar. O frontend fica em <http://localhost:5173> e a documentação da API em <http://localhost:8000/api/docs>. Use `make down` para encerrar os containers preservando os dados e `make logs` para acompanhar os logs. `make up` é um alias de `make run`.
 
-Em outro terminal, com a API em execução, aplique as migrações com `make migrate`. A preparação do catálogo, das escolas e da conta administrativa segue as instruções das seções abaixo.
+Em outro terminal, com a API em execução, aplique as migrações com `make migrate`. A preparação do catálogo e da conta administrativa segue as instruções das seções abaixo.
 
 Para desenvolvimento local, com Node.js, npm, uv e Docker disponíveis:
 
@@ -148,7 +148,7 @@ O nome do banco deve terminar em `_test`. Os testes criam e removem apenas esque
 
 ## Banco e migrações
 
-Os 14 modelos do domínio estão em `backend/app/models.py`. A revisão `0001` cria tabelas, índices, constraints e triggers. As regras SQL dessa revisão ficam em `backend/migrations/versions/0001_integrity.sql`, carregadas pela migração; ambos os arquivos devem ser distribuídos juntos. Não use `create_all` nem execute `docs/database-schema.sql`: esse arquivo é a proposta original, não uma migração.
+Os 13 modelos do domínio estão em `backend/app/models.py`. A revisão `0001` cria tabelas, índices, constraints e triggers. As regras SQL dessa revisão ficam em `backend/migrations/versions/0001_integrity.sql`, carregadas pela migração; ambos os arquivos devem ser distribuídos juntos. A revisão `0002` copia o nome da escola para `participations.school_name` em todas as participações existentes e remove o vínculo e a tabela `schools`. O downgrade recria escolas pelos nomes salvos, sem recuperar os antigos IDs, cidade, UF ou disponibilidade. Aplique `make migrate` ao atualizar uma instalação existente. Não use `create_all` nem execute `docs/database-schema.sql`: esse arquivo é a proposta original, não uma migração.
 
 Para preparar um banco vazio ou atualizar o banco local:
 
@@ -189,7 +189,7 @@ Todas as telas usam Material UI, incluindo cadastro, escolhas, revisão, resulta
 
 A referência visual é a [página inicial do ISECENSA](https://www.isecensa.edu.br/), consultada em 29/10/2026: azul `#006aa3`, azul-marinho `#0b172b`, rodapé `#001a33`, fundos brancos e detalhes dourados. Inter no texto e Open Sans nos títulos são servidas localmente por Fontsource; suas licenças acompanham o build em `frontend/public/licenses/`. O brasão em `frontend/public/brand/brasao-isecensa.png` foi obtido do [arquivo publicado no site institucional](https://www.isecensa.edu.br/sites/default/files/BRAS%C3%83O%20COLOR.png). O tema adapta essas referências ao quiz; ajustes futuros de marca devem ser feitos nesse tema central.
 
-A escola é escolhida entre os registros ativos por um Autocomplete com busca no servidor. Digitar outro nome desfaz a seleção anterior; é necessário escolher uma opção válida da lista antes de iniciar. O telefone aceita formatação brasileira com DDD e é enviado no formato `+55…`. O aviso configurado pela instituição aparece antes do cadastro. Se catálogo publicado, escolas ou aviso ainda não estiverem preparados, a interface informa a indisponibilidade e permite tentar novamente; não cria nem publica conteúdo automaticamente.
+A escola é um campo de texto obrigatório: o participante digita o nome livremente, com até 200 caracteres. O nome é salvo na própria participação, sem espaços nas extremidades, e continua disponível no histórico, nos filtros, nos resumos e no CSV. Não é necessário cadastrar escolas antecipadamente. O telefone aceita formatação brasileira com DDD e é enviado no formato `+55…`. O aviso configurado pela instituição aparece antes do cadastro. Se catálogo publicado ou aviso ainda não estiverem preparados, a interface informa a indisponibilidade e permite tentar novamente; não cria nem publica conteúdo automaticamente.
 
 Contatos e marcações ficam apenas na memória da página, sem `localStorage` ou `sessionStorage`. Os contatos saem da tela após iniciar o quiz. Marcações ainda não enviadas se perdem ao recarregar; há aviso ao tentar sair com escolhas e informação explícita na retomada do rascunho. Uma sessão existente oferece continuar ou encerrar antes de outro cadastro, sem exibir automaticamente o resultado anterior. A retomada usa a versão original da participação, inclusive se arquivada.
 
@@ -217,7 +217,7 @@ Para testar também o fluxo com API real, catálogo original e PostgreSQL, confi
 TEST_DATABASE_URL=postgresql+psycopg://usuario:senha@localhost:5432/iseday_test npm run test:live
 ```
 
-Esse comando também exige `uv` no PATH. O servidor de teste cria um esquema aleatório próprio, aplica a migração, importa/publica o catálogo **somente nesse esquema de teste** e adiciona uma escola fictícia. O esquema é removido ao encerrar. Não usa o banco da aplicação nem altera o catálogo publicado nela. As portas 5179 (Vite) e 8009 (API de teste) precisam estar livres. Capturas e traces de teste ficam em `frontend/test-results/`, fora do Git.
+Esse comando também exige `uv` no PATH. O servidor de teste cria um esquema aleatório próprio, aplica a migração, importa/publica o catálogo **somente nesse esquema de teste** e usa os nomes de escola digitados durante o teste. O esquema é removido ao encerrar. Não usa o banco da aplicação nem altera o catálogo publicado nela. As portas 5179 (Vite) e 8009 (API de teste) precisam estar livres. Capturas e traces de teste ficam em `frontend/test-results/`, fora do Git.
 
 ## Catálogo do quiz
 
@@ -271,14 +271,13 @@ Os testes cobrem limites, duplicatas, identificadores externos à versão, vínc
 
 ## API do participante
 
-As rotas ficam sob a mesma origem do frontend, usando o proxy `/api`. O cadastro exige uma versão publicada e escolas ativas já cadastradas no banco. O importador continua criando somente rascunhos: esta etapa não publica o catálogo nem cadastra escolas automaticamente.
+As rotas ficam sob a mesma origem do frontend, usando o proxy `/api`. O cadastro exige uma versão publicada e o aviso de uso dos dados configurado. A escola é informada em texto livre e salva em `school_name`. O importador continua criando somente rascunhos: esta etapa não publica o catálogo automaticamente.
 
 Configure `PRIVACY_NOTICE_VERSION` e `PRIVACY_NOTICE_TEXT` no `.env`. O exemplo fornecido é somente para desenvolvimento com dados fictícios; substitua-o pelo aviso institucional aprovado antes do uso real. Sem ambos, a consulta do quiz e novos cadastros retornam 503. A versão apresentada precisa ser enviada no cadastro; ela registra qual aviso foi exibido, sem representar consentimento por si só.
 
 | Método e rota | Comportamento |
 |---|---|
 | `GET /api/quiz/current` | Versão publicada, aviso e afirmativas ordenadas, sem vínculos ou pesos. |
-| `GET /api/schools?q=nome&limit=50` | Escolas ativas; busca por nome e limite de 1 a 100 registros. |
 | `POST /api/participations` | Cadastro validado, participação em rascunho e cookie temporário. |
 | `GET /api/participations/me` | Identificador, versão, estado e expiração da própria sessão, sem contatos. |
 | `GET /api/participations/me/quiz` | Afirmativas da versão vinculada à sessão, inclusive após arquivamento, sem vínculos ou pesos. |
@@ -289,12 +288,12 @@ Configure `PRIVACY_NOTICE_VERSION` e `PRIVACY_NOTICE_TEXT` no `.env`. O exemplo 
 
 Todos os POSTs exigem o cabeçalho `X-Quiz-Request: 1`. A API recusa requisições com `Sec-Fetch-Site: cross-site` e não habilita CORS. Esse cabeçalho personalizado é a proteção de CSRF para a API de mesma origem; qualquer futura abertura de CORS precisa preservar essa proteção. Referência: [OWASP — cabeçalhos personalizados para APIs](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi).
 
-Exemplo do corpo do cadastro (substitua os UUIDs pelos valores de `/api/quiz/current` e `/api/schools`):
+Exemplo do corpo do cadastro (substitua o UUID pelo valor de `/api/quiz/current`):
 
 ```json
 {
   "quiz_version_id": "00000000-0000-0000-0000-000000000001",
-  "school_id": "00000000-0000-0000-0000-000000000002",
+  "school_name": "Escola do participante",
   "full_name": "Aluno de teste",
   "phone": "+5511999999999",
   "email": "aluno@example.org",
@@ -384,20 +383,19 @@ As consultas usam os resultados persistidos, sem recalcular ou editar respostas.
 | `POST /api/admin/login` | Recebe `email` e `password`; cria a sessão e retorna identidade e validade. |
 | `GET /api/admin/me` | Identidade e expiração da sessão administrativa. |
 | `POST /api/admin/logout` | Revoga a sessão atual e remove o cookie; repetição é segura. |
-| `GET /api/admin/options` | Escolas, versões, áreas e cursos disponíveis para filtrar o histórico. |
+| `GET /api/admin/options` | Nomes de escola salvos nas participações, versões, áreas e cursos disponíveis para filtrar o histórico. |
 | `GET /api/admin/participations` | Lista sem contatos, com `page` (padrão 1) e `page_size` (padrão 20, máximo 100). |
 | `GET /api/admin/participations/{id}` | Cadastro, seleções, resultado e confirmação de uma participação. |
 | `GET /api/admin/summary` | Contagens e distribuições do conjunto filtrado, independentemente da página. |
 
-Listagem e resumo aceitam `q`, `school_id`, `quiz_version_id`, `status` (`draft`, `submitted`, `completed`), `area_id`, `course_id`, `agreement` (`yes`, `no`, `pending`), `date_from` e `date_to` (`AAAA-MM-DD`). Área e curso filtram apenas indicadores de vitória/sugestão. As consultas mantêm um retrato consistente do banco durante submissões concorrentes.
+Listagem e resumo aceitam `q`, `school_name`, `quiz_version_id`, `status` (`draft`, `submitted`, `completed`), `area_id`, `course_id`, `agreement` (`yes`, `no`, `pending`), `date_from` e `date_to` (`AAAA-MM-DD`). O filtro de escola compara o nome salvo exatamente; as opções vêm dos nomes distintos já informados pelos participantes. Área e curso filtram apenas indicadores de vitória/sugestão. As consultas mantêm um retrato consistente do banco durante submissões concorrentes.
 
 Os testes PostgreSQL cobrem credenciais incorretas, conta inativa, cookies, expiração, revogação, troca de senha, isolamento do participante, limites, filtros, paginação, empates, rascunhos, histórico e auditoria. `npm --prefix frontend test` inclui os cenários administrativos de navegador, recuperação de erros e layout móvel. `npm --prefix frontend run test:live`, com `TEST_DATABASE_URL`, valida também cadastro → resultado → confirmação → login administrativo → consulta individual → logout contra a API e o banco reais, criando uma conta fictícia exclusivamente no esquema temporário do teste.
 
-### Gestão de escolas, versões e destinos
+### Gestão de versões e destinos
 
-Depois de entrar, use a navegação **Participações**, **Escolas** e **Versões e destinos**:
+Depois de entrar, use a navegação **Participações** e **Versões e destinos**:
 
-- Em **Escolas** (`/admin/schools`), cadastre e edite nome, cidade, UF e disponibilidade. Escolas inativas deixam de aparecer para novos cadastros; as participações existentes continuam disponíveis e podem ser concluídas. Não há exclusão de escolas pelo painel.
 - Em **Versões e destinos** (`/admin/versions`), crie um rascunho a partir do catálogo original de 74 afirmativas ou copie qualquer versão existente. A cópia recebe outro número e novos identificadores, preservando textos, vínculos, pesos e destinos da origem.
 - Abra uma versão para configurar nome do evento, acolhimento em Psicologia/SPA, destinos e instruções de cada área e, opcionalmente, de cada curso. Destino e instruções do curso precisam ser informados juntos; ambos vazios usam o encaminhamento da área. Somente rascunhos podem ser editados.
 - Em **Perguntas e pesos**, busque e edite afirmativas existentes ou use **Adicionar afirmativa**. O editor permite vincular cursos, adicionar/remover vínculos e ajustar os respectivos pesos. **Aplicar ao rascunho** mantém a alteração no formulário; **Salvar rascunho** grava perguntas, pesos e destinos juntos. Novas afirmativas entram no final e recebem numeração automaticamente ao salvar. A versão aceita até 1.000 afirmativas; cada uma precisa de texto único (até 4.000 caracteres) e pelo menos um curso, sem vínculos repetidos, com pesos inteiros de 1 a 32.767. Os cursos precisam pertencer à versão. O aluno continua selecionando exatamente 25 afirmativas; os pesos alteram a soma por curso e a área continua contando um ponto distinto por afirmativa. A publicação exige que todos os cursos e áreas estejam cobertos. Versões publicadas ou arquivadas permitem somente consulta; crie uma cópia para revisar o conteúdo. A importação por planilha continua disponível como alternativa. A conferência no painel não substitui a validação institucional.
@@ -413,9 +411,6 @@ A exportação exige autenticação, gera auditoria e neutraliza células que po
 
 | Método e rota | Comportamento |
 |---|---|
-| `GET /api/admin/schools?q=nome` | Lista escolas ativas e inativas, com busca pelo nome. |
-| `POST /api/admin/schools` | Cadastra uma escola. |
-| `POST /api/admin/schools/{id}` | Atualiza os dados e a disponibilidade da escola. |
 | `GET /api/admin/versions` | Lista versões e quantidade de afirmativas. |
 | `GET /api/admin/versions/{id}` | Conteúdo, destinos e revisão da versão. |
 | `POST /api/admin/versions` | Cria um rascunho original ou uma cópia. |
@@ -424,4 +419,4 @@ A exportação exige autenticação, gera auditoria e neutraliza células que po
 | `POST /api/admin/versions/{id}/archive` | Arquiva a versão publicada, preservando participações. |
 | `GET /api/admin/export.csv` | Exporta o conjunto filtrado; aceita os mesmos filtros da consulta administrativa. |
 
-Os testes adicionais verificam autenticação e CSRF das operações, gestão de escolas, importação e cópia de versões, edição atômica de destinos/perguntas/pesos, rejeição de textos e vínculos duplicados ou externos à versão, pontuação com os novos pesos, detecção de rascunho desatualizado, publicação concorrente, preservação do histórico e exportação com filtros/empates/proteção contra fórmulas. Os cenários de navegador cobrem as novas telas, falhas recuperáveis e navegação móvel. O teste com API e banco reais também cadastra/inativa uma escola, copia/configura/publica uma versão com pergunta nova e pesos editados e baixa um CSV, sempre no esquema descartável de teste.
+Os testes adicionais verificam autenticação e CSRF das operações, persistência de escolas em texto livre, migração do histórico, importação e cópia de versões, edição atômica de destinos/perguntas/pesos, rejeição de textos e vínculos duplicados ou externos à versão, pontuação com os novos pesos, detecção de rascunho desatualizado, publicação concorrente, preservação do histórico e exportação com filtros/empates/proteção contra fórmulas. Os cenários de navegador cobrem as novas telas, falhas recuperáveis e navegação móvel. O teste com API e banco reais também verifica a escola digitada no detalhe administrativo, copia/configura/publica uma versão com pergunta nova e pesos editados e baixa um CSV, sempre no esquema descartável de teste.

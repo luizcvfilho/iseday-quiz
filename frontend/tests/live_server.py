@@ -12,8 +12,8 @@ from app.catalog import DEFAULT_WORKBOOK, import_catalog, read_catalog
 from app.core.config import Settings
 from app.db import get_session
 from app.main import create_app
-from app.models import QuizVersion, School
-from sqlalchemy import create_engine, insert, text, update
+from app.models import QuizVersion
+from sqlalchemy import create_engine, text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
@@ -50,7 +50,6 @@ def main():
                 .where(QuizVersion.id == imported.version_id)
                 .values(status="published")
             )
-            connection.execute(insert(School).values(name="Escola de teste (fictícia)"))
         with Session(engine) as session, session.begin():
             save_account(
                 session,

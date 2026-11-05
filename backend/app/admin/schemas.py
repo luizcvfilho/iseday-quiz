@@ -23,7 +23,7 @@ class AdminIdentity(BaseModel):
 
 class Filters(BaseModel):
     q: str = Field(default="", max_length=200)
-    school_id: UUID | None = None
+    school_name: str | None = Field(default=None, max_length=200)
     quiz_version_id: UUID | None = None
     status: Literal["draft", "submitted", "completed"] | None = None
     area_id: UUID | None = None
@@ -60,7 +60,7 @@ class CatalogItem(NamedItem):
 
 
 class Options(BaseModel):
-    schools: list[NamedItem]
+    schools: list[str]
     versions: list[VersionItem]
     areas: list[CatalogItem]
     courses: list[CatalogItem]
@@ -69,7 +69,7 @@ class Options(BaseModel):
 class ParticipationRow(BaseModel):
     id: UUID
     full_name: str
-    school: NamedItem
+    school_name: str
     quiz_version_id: UUID
     version_number: int
     status: Literal["draft", "submitted", "completed"]
@@ -102,6 +102,11 @@ class CountItem(NamedItem):
     version_number: int | None = None
 
 
+class SchoolCount(BaseModel):
+    name: str
+    count: int
+
+
 class Summary(BaseModel):
     total: int
     draft: int
@@ -110,6 +115,6 @@ class Summary(BaseModel):
     agreed: int
     disagreed: int
     agreement_rate: float | None
-    schools: list[CountItem]
+    schools: list[SchoolCount]
     areas: list[CountItem]
     courses: list[CountItem]

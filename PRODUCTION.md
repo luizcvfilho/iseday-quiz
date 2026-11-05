@@ -43,7 +43,7 @@ make prod-admin
 docker compose --env-file .env.production -f compose.production.yaml exec api /app/.venv/bin/python -m app.admin reset-password
 ```
 
-Abra `https://SEU_DOMINIO/admin`. Cadastre as escolas e crie uma versão do catálogo em **Versões e destinos**. Revise perguntas, pesos, destinos e instruções e publique a versão somente após validação institucional. Sem escolas ativas, aviso configurado e versão publicada, o cadastro de alunos permanece indisponível. Migrações não publicam conteúdo nem criam usuários.
+Abra `https://SEU_DOMINIO/admin`. Crie uma versão do catálogo em **Versões e destinos**. Revise perguntas, pesos, destinos e instruções e publique a versão somente após validação institucional. Sem aviso configurado e versão publicada, o cadastro de alunos permanece indisponível. Migrações não publicam conteúdo nem criam usuários.
 
 Verifique os endpoints no domínio publicado:
 

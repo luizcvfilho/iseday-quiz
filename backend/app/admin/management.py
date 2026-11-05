@@ -24,40 +24,11 @@ from app.models import (
     Area,
     Course,
     QuizVersion,
-    School,
     Statement,
     StatementCourseWeight,
 )
 from app.participants.service import load_scoring_catalog
 from app.scoring import ScoringConfigurationError, calculate_scores
-
-
-def school_item(school: School) -> schema.SchoolItem:
-    return schema.SchoolItem(
-        id=school.id,
-        name=school.name,
-        city=school.city or "",
-        state_code=school.state_code or "",
-        is_active=school.is_active,
-    )
-
-
-def schools(session: Session, q: str):
-    query = select(School).order_by(func.lower(School.name), School.id)
-    if q.strip():
-        query = query.where(School.name.icontains(q.strip(), autoescape=True))
-    return [school_item(s) for s in session.scalars(query)]
-
-
-def save_school(session: Session, data: schema.SchoolInput, school_id: UUID | None = None):
-    school = session.get(School, school_id, with_for_update=True) if school_id else School()
-    if school is None:
-        raise HTTPException(404, "Escola não encontrada.")
-    for key, value in data.model_dump().items():
-        setattr(school, key, value or None if key in ("city", "state_code") else value)
-    session.add(school)
-    session.flush()
-    return school_item(school)
 
 
 def version(session: Session, version_id: UUID, *, draft=False):
@@ -353,7 +324,7 @@ def export_csv(session: Session, filters: Filters):
         cells = [
             str(row.id),
             row.full_name,
-            row.school.name,
+            row.school_name,
             row.version_number,
             labels[row.status],
             row.started_at.astimezone(service.EVENT_ZONE).strftime("%d/%m/%Y %H:%M:%S"),

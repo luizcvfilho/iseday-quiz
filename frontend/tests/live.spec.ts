@@ -9,8 +9,7 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.evaluate(() => document.fonts.ready)
   await page.screenshot({ path: testInfo.outputPath('cadastro-desktop.png'), fullPage: true })
   await page.getByLabel('Nome completo').fill('Aluno fictício para teste')
-  await page.getByRole('combobox', { name: /^Escola/ }).fill('Escola de teste')
-  await page.getByRole('option', { name: 'Escola de teste (fictícia)', exact: true }).click()
+  await page.getByRole('textbox', { name: /^Escola/ }).fill('Escola de teste')
   await page.getByLabel('Telefone com DDD').fill('(11) 99999-9999')
   await page.getByRole('textbox', { name: /^E-mail/ }).fill('teste@example.org')
   await page.getByRole('button', { name: 'Começar meu quiz' }).click()
@@ -60,13 +59,18 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
     expect(cookie).toMatchObject({ secure: true, httpOnly: true, sameSite: 'Strict', path: '/' })
   }
   await page.getByLabel('Nome do estudante').fill('Aluno fictício')
+  await page.getByRole('combobox', { name: 'Escola', exact: true }).click()
+  await page.getByRole('option', { name: 'Escola de teste', exact: true }).click()
   await page.getByRole('button', { name: 'Aplicar filtros' }).click()
+  await expect(page).toHaveURL(/school_name=Escola\+de\+teste/)
   await expect(
     page.getByRole('link', { name: 'Ver resultado de Aluno fictício para teste' }),
   ).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('admin-painel.png'), fullPage: true })
   await page.getByRole('link', { name: 'Ver resultado de Aluno fictício para teste' }).click()
   await expect(page.getByText('teste@example.org')).toBeVisible()
+  await expect(page.getByText('Escola de teste', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Escolas', exact: true })).toHaveCount(0)
   await expect(
     page.getByRole('heading', { name: 'Afirmativas selecionadas (25)' }),
   ).toBeVisible()
@@ -75,22 +79,6 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   ).toHaveCount(2)
   await expect(page.getByText('Curso escolhido: Enfermagem')).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('admin-detalhe.png'), fullPage: true })
-  await page.getByRole('link', { name: 'Escolas', exact: true }).click()
-  await page.getByRole('button', { name: 'Cadastrar escola', exact: true }).click()
-  await page.getByLabel('Nome da escola').fill('Escola nova do teste de gestão')
-  await page.getByLabel('Cidade', { exact: true }).fill('Campos')
-  await page.getByLabel('UF', { exact: true }).fill('RJ')
-  await page.getByRole('button', { name: 'Salvar escola' }).click()
-  await expect(
-    page.getByRole('heading', { name: 'Escola nova do teste de gestão' }),
-  ).toBeVisible()
-  expect((await (await page.request.get('/api/schools?q=Escola nova')).json()).length).toBe(1)
-  await page.getByRole('button', { name: 'Editar Escola nova do teste de gestão' }).click()
-  await page.getByRole('switch', { name: 'Disponível para novos participantes' }).uncheck()
-  await page.getByRole('button', { name: 'Salvar escola' }).click()
-  await expect(page.getByText('Inativa', { exact: true })).toBeVisible()
-  expect((await (await page.request.get('/api/schools?q=Escola nova')).json()).length).toBe(0)
-  await page.screenshot({ path: testInfo.outputPath('admin-escolas.png'), fullPage: true })
   await page.getByRole('link', { name: 'Versões e destinos' }).click()
   await page.getByRole('button', { name: 'Copiar versão 1' }).click()
   await page.getByLabel('Nome do evento').fill('Evento de teste revisado')

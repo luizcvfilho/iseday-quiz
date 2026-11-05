@@ -15,7 +15,6 @@ const quiz = {
   privacy_notice_version: 'test-v1',
   privacy_notice_text: 'Aviso de teste: use apenas dados fictícios.',
 }
-const schools = [{ id: 'school-1', name: 'Escola de teste', city: 'São Paulo', state_code: 'SP' }]
 
 async function mockApi(page: Page) {
   const state = {
@@ -44,19 +43,14 @@ async function mockApi(page: Page) {
     if (method === 'POST') expect(request.headers()['x-quiz-request']).toBe('1')
     if (path === '/api/quiz/current')
       return state.failCurrent ? reply(503, { detail: 'Quiz indisponível.' }) : reply(200, quiz)
-    if (path === '/api/schools') {
-      const q = new URL(request.url()).searchParams.get('q') ?? ''
-      return reply(
-        200,
-        schools.filter((s) => s.name.toLowerCase().includes(q.toLowerCase())),
-      )
-    }
     if (path === '/api/participations/me')
       return state.session ? reply(200, state.session) : reply(401, { detail: 'Sessão ausente.' })
     if (path === '/api/participations/me/quiz') return reply(200, quiz)
     if (path === '/api/participations') {
       state.registrations++
       expect(request.postDataJSON().phone).toBe('+5511999999999')
+      expect(request.postDataJSON().school_name).toBe('Escola de teste')
+      expect(request.postDataJSON()).not.toHaveProperty('school_id')
       state.session = {
         id: 'participant-1',
         quiz_version_id: quiz.id,
@@ -140,8 +134,7 @@ async function mockApi(page: Page) {
 async function register(page: Page) {
   await page.goto('/')
   await page.getByLabel('Nome completo').fill('Aluno de teste')
-  await page.getByRole('combobox', { name: /^Escola/ }).fill('Escola de teste')
-  await page.getByRole('option', { name: /^Escola de teste/ }).click()
+  await page.getByRole('textbox', { name: /^Escola/ }).fill('Escola de teste')
   await page.getByLabel('Telefone com DDD').fill('(11) 99999-9999')
   await page.getByRole('textbox', { name: /^E-mail/ }).fill('aluno@example.org')
   await page.getByRole('button', { name: 'Começar meu quiz' }).click()
@@ -289,8 +282,7 @@ test('telefone inválido e escola ausente têm mensagens acionáveis', async ({ 
   const state = await mockApi(page)
   await page.goto('/')
   await page.getByLabel('Nome completo').fill('Aluno de teste')
-  await page.getByRole('combobox', { name: /^Escola/ }).fill('Escola de teste')
-  await page.getByRole('option', { name: /^Escola de teste/ }).click()
+  await page.getByRole('textbox', { name: /^Escola/ }).fill('Escola de teste')
   await page.getByLabel('Telefone com DDD').fill('123')
   await page.getByRole('textbox', { name: /^E-mail/ }).fill('aluno@example.org')
   await page.getByRole('button', { name: 'Começar meu quiz' }).click()
@@ -298,9 +290,13 @@ test('telefone inválido e escola ausente têm mensagens acionáveis', async ({ 
     page.getByText('Informe um telefone brasileiro com DDD e 10 ou 11 dígitos.'),
   ).toBeVisible()
   expect(state.registrations).toBe(0)
-  await page.getByRole('combobox', { name: /^Escola/ }).fill('desconhecida')
+  await page.getByRole('textbox', { name: /^Escola/ }).fill('   ')
   await expect(page.getByRole('button', { name: 'Começar meu quiz' })).toBeDisabled()
-  await expect(page.getByText('Nenhuma escola encontrada.')).toBeVisible()
+  await page.getByRole('textbox', { name: /^Escola/ }).fill('Escola de teste')
+  await page.getByLabel('Telefone com DDD').fill('(11) 99999-9999')
+  await page.getByRole('button', { name: 'Começar meu quiz' }).click()
+  await expect(page.getByRole('heading', { name: 'O que combina com você?' })).toBeVisible()
+  expect(state.registrations).toBe(1)
 })
 
 test('erro de disponibilidade pode ser recuperado', async ({ page }) => {
@@ -323,7 +319,7 @@ test('página desconhecida mantém a identidade e oferece retorno ao cadastro', 
     .poll(() => crest.evaluate((image) => (image as HTMLImageElement).naturalWidth))
     .toBeGreaterThan(0)
   await page.getByRole('link', { name: 'Voltar ao início' }).click()
-  await expect(page.getByRole('combobox', { name: /^Escola/ })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /^Escola/ })).toBeVisible()
 })
 
 test('layout móvel permite chegar ao encaminhamento sem rolagem horizontal', async ({ page }) => {

@@ -1,12 +1,10 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, Response
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.models import School
 from app.participants import service
 from app.participants.schemas import (
     CurrentQuiz,
@@ -14,7 +12,6 @@ from app.participants.schemas import (
     FeedbackResult,
     ParticipationResult,
     ParticipationSession,
-    PublicSchool,
     QuizContent,
     Registration,
     Submission,
@@ -40,22 +37,6 @@ def throttle(request: Request, action: str, limit: int) -> None:
 def quiz(request: Request, session: Database):
     with session.begin():
         return service.current_quiz(session, request.app.state.settings)
-
-
-@router.get("/schools", response_model=list[PublicSchool])
-def schools(
-    session: Database,
-    q: Annotated[str, Query(max_length=100)] = "",
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-):
-    query = select(School).where(School.is_active.is_(True))
-    if q.strip():
-        query = query.where(School.name.icontains(q.strip(), autoescape=True))
-    with session.begin():
-        return [
-            PublicSchool(id=s.id, name=s.name, city=s.city, state_code=s.state_code)
-            for s in session.scalars(query.order_by(School.name, School.id).limit(limit))
-        ]
 
 
 @router.post("/participations", response_model=ParticipationSession, dependencies=WRITE)

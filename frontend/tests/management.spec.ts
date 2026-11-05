@@ -2,13 +2,6 @@ import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 async function management(page: Page) {
-  const school = {
-    id: 's1',
-    name: 'Escola fictícia',
-    city: 'Campos',
-    state_code: 'RJ',
-    is_active: true,
-  }
   const version = {
     id: 'v2',
     event_name: 'ISE Day',
@@ -49,7 +42,7 @@ async function management(page: Page) {
     ],
   }
   const published = { ...version, id: 'v1', version_number: 1, status: 'published' }
-  const state = { school, version, published, saved: false, failSave: false, failList: false }
+  const state = { version, published, saved: false, failSave: false }
   await page.route('**/api/**', async (route) => {
     const req = route.request()
     const url = new URL(req.url())
@@ -64,14 +57,6 @@ async function management(page: Page) {
         email: 'admin@example.org',
         expires_at: new Date(Date.now() + 3600000).toISOString(),
       })
-    if (url.pathname === '/api/admin/schools' && !post) {
-      if (state.failList) return reply({ detail: 'Escolas indisponíveis.' }, 503)
-      return reply([state.school])
-    }
-    if (url.pathname.startsWith('/api/admin/schools') && post) {
-      state.school = { ...state.school, ...body }
-      return reply(state.school, url.pathname.endsWith('/schools') ? 201 : 200)
-    }
     if (url.pathname === '/api/admin/versions' && post) {
       expect(body).toEqual({ event_name: 'Novo evento', source_version_id: null })
       return reply(state.version, 201)
@@ -140,29 +125,6 @@ async function management(page: Page) {
   return state
 }
 
-test('escolas: cadastro, edição, inativação e recuperação de erro', async ({ page }) => {
-  const state = await management(page)
-  state.failList = true
-  await page.goto('/admin/schools')
-  await expect(page.getByRole('alert')).toContainText('Escolas indisponíveis')
-  state.failList = false
-  await page.getByRole('button', { name: 'Tentar novamente' }).click()
-  await expect(
-    page.getByRole('heading', { name: 'Escola fictícia', exact: true }),
-  ).toBeVisible()
-  await page.getByRole('button', { name: 'Cadastrar escola', exact: true }).click()
-  await page.getByLabel('Nome da escola').fill('Escola Nova')
-  await page.getByLabel('Cidade', { exact: true }).fill('Campos')
-  await page.getByLabel('UF', { exact: true }).fill('rj')
-  await page.getByRole('button', { name: 'Salvar escola' }).click()
-  await expect(page.getByRole('heading', { name: 'Escola Nova', exact: true })).toBeVisible()
-  expect(state.school.state_code).toBe('RJ')
-  await page.getByRole('button', { name: 'Editar Escola Nova' }).click()
-  await page.getByRole('switch', { name: 'Disponível para novos participantes' }).uncheck()
-  await page.getByRole('button', { name: 'Salvar escola' }).click()
-  await expect(page.getByText('Inativa', { exact: true })).toBeVisible()
-})
-
 test('versões: criar, configurar destinos, revisar, publicar e arquivar', async ({ page }) => {
   const state = await management(page)
   await page.goto('/admin/versions')
@@ -208,10 +170,8 @@ test('conflito preserva o formulário e recarregar recupera o rascunho', async (
 test('gestão cabe no celular e navegação mantém as opções acessíveis', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await management(page)
-  await page.goto('/admin/schools')
-  await expect(
-    page.getByRole('heading', { name: 'Escola fictícia', exact: true }),
-  ).toBeVisible()
+  await page.goto('/admin/versions')
+  await expect(page.getByRole('link', { name: 'Escolas', exact: true })).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
     true,
   )

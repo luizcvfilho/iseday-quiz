@@ -215,7 +215,6 @@ export function AdminShell({
             >
               {[
                 ['/admin', 'Participações'],
-                ['/admin/schools', 'Escolas'],
                 ['/admin/versions', 'Versões e destinos'],
               ].map(([path, label]) => (
                 <Button
@@ -279,7 +278,7 @@ export function AdminLogin() {
   const from = location.state?.from
   const destination =
     typeof from === 'string' &&
-    /^\/admin(?:\?|$|\/(?:participations|schools|versions)(?:\/|\?|$))/.test(from)
+    /^\/admin(?:\?|$|\/(?:participations|versions)(?:\/|\?|$))/.test(from)
       ? from
       : '/admin'
   if (user) return <Navigate to={destination} replace />

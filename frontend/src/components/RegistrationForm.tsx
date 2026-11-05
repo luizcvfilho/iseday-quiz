@@ -1,11 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   Alert,
-  Autocomplete,
   Box,
   Button,
-  CircularProgress,
   Paper,
   Stack,
   TextField,
@@ -13,8 +11,8 @@ import {
 } from '@mui/material'
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded'
 import PrivacyTipOutlined from '@mui/icons-material/PrivacyTipOutlined'
-import { api, errorMessage, normalizePhone } from '../api'
-import type { CurrentQuiz, Registration, School } from '../api'
+import { normalizePhone } from '../api'
+import type { CurrentQuiz, Registration } from '../api'
 import { brand } from '../theme'
 import { SectionHeading } from './Presentation'
 
@@ -26,40 +24,12 @@ type Props = {
 }
 
 export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) {
-  const [schools, setSchools] = useState<School[]>([])
-  const [school, setSchool] = useState<School | null>(null)
-  const [search, setSearch] = useState('')
-  const [schoolInput, setSchoolInput] = useState('')
-  const [schoolError, setSchoolError] = useState('')
-  const [schoolLoading, setSchoolLoading] = useState(true)
-  const [retry, setRetry] = useState(0)
+  const [schoolName, setSchoolName] = useState('')
   const [phoneError, setPhoneError] = useState('')
-  useEffect(() => {
-    const controller = new AbortController()
-    const timer = setTimeout(() => {
-      setSchoolLoading(true)
-      setSchoolError('')
-      api
-        .schools(search, controller.signal)
-        .then((items) => {
-          if (!controller.signal.aborted) setSchools(items)
-        })
-        .catch((error) => {
-          if (!controller.signal.aborted) setSchoolError(errorMessage(error))
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setSchoolLoading(false)
-        })
-    }, 250)
-    return () => {
-      clearTimeout(timer)
-      controller.abort()
-    }
-  }, [search, retry])
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || !school) return
+    if (busy || !schoolName.trim()) return
     const fields = new FormData(event.currentTarget)
     const phone = normalizePhone(String(fields.get('phone')))
     if (!phone) {
@@ -69,7 +39,7 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
     setPhoneError('')
     onSubmit({
       quiz_version_id: quiz.id,
-      school_id: school.id,
+      school_name: schoolName.trim(),
       full_name: String(fields.get('full_name')).trim(),
       phone,
       email: String(fields.get('email')).trim(),
@@ -77,8 +47,6 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
     })
   }
   const invalid = (field: string) => serverFields.includes(field)
-  const options =
-    school && !schools.some((item) => item.id === school.id) ? [school, ...schools] : schools
 
   return (
     <Box
@@ -204,75 +172,20 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
               error={invalid('full_name')}
               helperText={invalid('full_name') ? 'Informe seu nome completo.' : undefined}
             />
-            <Autocomplete
+            <TextField
               id="school"
-              options={options}
-              value={school}
-              inputValue={schoolInput}
+              name="school_name"
+              label="Escola"
+              placeholder="Digite o nome da sua escola"
+              value={schoolName}
+              onChange={(event) => setSchoolName(event.target.value)}
+              required
               disabled={busy}
-              loading={schoolLoading}
-              filterOptions={(items) => items}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
-              getOptionLabel={(item) => item.name + (item.city ? ' · ' + item.city : '')}
-              onChange={(_, value) => {
-                setSchool(value)
-                setSchoolInput(value ? value.name + (value.city ? ' · ' + value.city : '') : '')
-              }}
-              onInputChange={(_, value, reason) => {
-                if (reason === 'input' || reason === 'clear') {
-                  setSchoolInput(value)
-                  setSchool(null)
-                  setSearch(value.slice(0, 100))
-                  setSchoolLoading(true)
-                }
-              }}
-              loadingText="Buscando escolas…"
-              noOptionsText="Nenhuma escola encontrada."
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Escola"
-                  placeholder="Busque pelo nome da sua escola"
-                  required
-                  autoComplete="off"
-                  error={invalid('school_id') || !!schoolError}
-                  helperText={
-                    schoolError ||
-                    (invalid('school_id')
-                      ? 'Selecione uma escola ativa da lista.'
-                      : 'Não encontrou sua escola? Procure a equipe do evento.')
-                  }
-                  slotProps={{
-                    ...params.slotProps,
-                    htmlInput: {
-                      ...params.slotProps.htmlInput,
-                      maxLength: 100,
-                      autoComplete: 'off',
-                    },
-                    input: {
-                      ...params.slotProps.input,
-                      endAdornment: (
-                        <>
-                          {schoolLoading && (
-                            <CircularProgress
-                              color="inherit"
-                              size={18}
-                              aria-label="Buscando escolas"
-                            />
-                          )}
-                          {params.slotProps.input.endAdornment}
-                        </>
-                      ),
-                    },
-                  }}
-                />
-              )}
+              autoComplete="off"
+              slotProps={{ htmlInput: { maxLength: 200 } }}
+              error={invalid('school_name')}
+              helperText={invalid('school_name') ? 'Informe o nome da sua escola.' : undefined}
             />
-            {schoolError && (
-              <Button variant="text" onClick={() => setRetry((n) => n + 1)} disabled={busy}>
-                Buscar novamente
-              </Button>
-            )}
             <TextField
               id="phone"
               name="phone"
@@ -321,7 +234,7 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
               variant="contained"
               type="submit"
               fullWidth
-              disabled={busy || !school}
+              disabled={busy || !schoolName.trim()}
               loading={busy}
               loadingPosition="end"
               endIcon={<ArrowForwardRounded />}

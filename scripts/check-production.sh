@@ -49,7 +49,7 @@ unset password
 
 # Os dados fictícios só são criados no banco *_test do projeto temporário.
 "${compose[@]}" exec -T api /app/.venv/bin/python - <<'PY'
-from sqlalchemy import insert, update
+from sqlalchemy import update
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
@@ -57,7 +57,7 @@ from app.admin.__main__ import save_account
 from app.catalog import DEFAULT_WORKBOOK, import_catalog, read_catalog
 from app.core.config import get_settings
 from app.db import build_engine
-from app.models import QuizVersion, School
+from app.models import QuizVersion
 
 settings = get_settings()
 assert make_url(str(settings.database_url)).database == "iseday_production_test"
@@ -70,7 +70,6 @@ try:
             .where(QuizVersion.id == imported.version_id)
             .values(status="published")
         )
-        connection.execute(insert(School).values(name="Escola de teste (fictícia)"))
     with Session(engine) as session, session.begin():
         save_account(
             session, "create", "admin@example.org", "admin test password only", "Equipe de teste"

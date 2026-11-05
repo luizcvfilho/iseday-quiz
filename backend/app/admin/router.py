@@ -163,29 +163,6 @@ def summary(access: Access, filters: ReportFilters):
     return result
 
 
-@router.get("/schools", response_model=list[management_schemas.SchoolItem])
-def schools(access: Access, q: str = Query(default="", max_length=200)):
-    return management.schools(access.session, q)
-
-
-@router.post(
-    "/schools", response_model=management_schemas.SchoolItem, status_code=201, dependencies=WRITE
-)
-def create_school(data: management_schemas.SchoolInput, access: WriteAccess):
-    result = management.save_school(access.session, data)
-    security.audit(access.session, access.user, f"schools.create:{result.id}")
-    return result
-
-
-@router.post(
-    "/schools/{school_id}", response_model=management_schemas.SchoolItem, dependencies=WRITE
-)
-def update_school(school_id: UUID, data: management_schemas.SchoolInput, access: WriteAccess):
-    result = management.save_school(access.session, data, school_id)
-    security.audit(access.session, access.user, f"schools.update:{school_id}")
-    return result
-
-
 @router.get("/versions", response_model=list[management_schemas.VersionItem])
 def versions(access: Access):
     return management.versions(access.session)

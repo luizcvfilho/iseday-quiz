@@ -20,7 +20,9 @@ class Registration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     quiz_version_id: UUID
-    school_id: UUID
+    school_name: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+    ]
     full_name: Name
     phone: Annotated[str, StringConstraints(pattern=r"^\+55[1-9][0-9][0-9]{8,9}$")]
     email: Annotated[EmailStr, Field(max_length=254)]
@@ -74,13 +76,6 @@ class QuizContent(BaseModel):
 class CurrentQuiz(QuizContent):
     privacy_notice_version: str
     privacy_notice_text: str
-
-
-class PublicSchool(BaseModel):
-    id: UUID
-    name: str
-    city: str | None
-    state_code: str | None
 
 
 class ParticipationSession(BaseModel):
