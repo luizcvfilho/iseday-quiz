@@ -25,7 +25,7 @@ function App() {
       <Route
         path="*"
         element={
-          <FlowLayout active={false} busy={false} step={null} onExit={() => {}}>
+          <FlowLayout step={null}>
             <StatusScreen
               tag="ISE DAY"
               title="Página não encontrada"

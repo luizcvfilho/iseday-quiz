@@ -12,23 +12,10 @@ import type {
 import { RegistrationForm } from './components/RegistrationForm'
 import { QuizSelection } from './components/QuizSelection'
 import { QuizResult } from './components/QuizResult'
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  Dialog as MuiDialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Paper,
-  Typography,
-} from '@mui/material'
-import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded'
+import { Alert, AlertTitle, Box, Button, Paper, Typography } from '@mui/material'
 import NorthEastRounded from '@mui/icons-material/NorthEastRounded'
 import { FlowLayout } from './components/FlowLayout'
-import { Eyebrow, SectionHeading, StatusScreen } from './components/Presentation'
+import { SectionHeading, StatusScreen } from './components/Presentation'
 import { brand } from './theme'
 
 type Screen =
@@ -40,52 +27,7 @@ type Screen =
   | 'result'
   | 'referral'
   | 'expired'
-  | 'ending'
   | 'unavailable'
-
-function Dialog({
-  kind,
-  seconds,
-  onContinue,
-  onEnd,
-}: {
-  kind: 'idle' | 'exit'
-  seconds: number
-  onContinue: () => void
-  onEnd: () => void
-}) {
-  return (
-    <MuiDialog
-      open
-      aria-labelledby="dialog-title"
-      aria-describedby="dialog-description"
-      transitionDuration={0}
-      onClose={(_, reason) => {
-        if (reason === 'escapeKeyDown') onContinue()
-      }}
-    >
-      <DialogTitle id="dialog-title">
-        <Eyebrow>DISPOSITIVO COMPARTILHADO</Eyebrow>
-        {kind === 'idle' ? 'Você ainda está por aqui?' : 'Encerrar esta participação?'}
-      </DialogTitle>
-      <DialogContent>
-        <DialogContentText id="dialog-description">
-          {kind === 'idle'
-            ? `Sem atividade, esta tela será limpa em ${seconds} segundos para o próximo participante.`
-            : 'As marcações ainda não enviadas serão descartadas. Respostas já enviadas continuam registradas.'}
-        </DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button variant="contained" autoFocus onClick={onContinue}>
-          Continuar participação
-        </Button>
-        <Button variant="outlined" onClick={onEnd}>
-          Encerrar e limpar
-        </Button>
-      </DialogActions>
-    </MuiDialog>
-  )
-}
 
 export function QuizFlow() {
   const [screen, setScreen] = useState<Screen>('loading')
@@ -99,13 +41,9 @@ export function QuizFlow() {
   const [error, setError] = useState('')
   const [fields, setFields] = useState<string[]>([])
   const [uncertain, setUncertain] = useState(false)
-  const [dialog, setDialog] = useState<'idle' | 'exit' | null>(null)
-  const [seconds, setSeconds] = useState(60)
   const epoch = useRef(0)
   const busyRef = useRef(false)
-  const activity = useRef(Date.now())
   const pendingFeedback = useRef<Feedback | null>(null)
-  const channel = useRef<BroadcastChannel | null>(null)
 
   function clearPrivate() {
     setCurrent(null)
@@ -116,7 +54,6 @@ export function QuizFlow() {
     setReferral(null)
     setFields([])
     setUncertain(false)
-    setDialog(null)
     pendingFeedback.current = null
   }
   function begin() {
@@ -198,24 +135,14 @@ export function QuizFlow() {
       if (event.persisted) void bootstrap()
     }
     window.addEventListener('pageshow', onPageShow)
-    const activeChannel =
-      'BroadcastChannel' in window ? new BroadcastChannel('iseday-participant') : null
-    if (activeChannel) {
-      channel.current = activeChannel
-      activeChannel.onmessage = (event) => {
-        if (event.data === 'ended') expire()
-      }
-    }
     return () => {
       mounted = false
       invalidatePending()
       window.removeEventListener('pageshow', onPageShow)
-      activeChannel?.close()
     }
   }, [])
 
   useEffect(() => {
-    activity.current = Date.now()
     document.querySelector<HTMLElement>('h1')?.focus()
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [screen])
@@ -234,63 +161,12 @@ export function QuizFlow() {
   }, [screen, selected.length])
 
   useEffect(() => {
-    if (!['registration', 'resume', 'quiz', 'review', 'result', 'referral'].includes(screen)) return
-    const touch = () => {
-      if (dialog !== 'idle') activity.current = Date.now()
-    }
-    for (const name of ['pointerdown', 'keydown', 'scroll'])
-      window.addEventListener(name, touch, { passive: true })
+    if (!participant) return
     const timer = window.setInterval(() => {
-      if (participant && Date.now() >= Date.parse(participant.access_expires_at)) {
-        expire()
-        return
-      }
-      if (busyRef.current) return
-      const idle = Date.now() - activity.current
-      if (idle >= 300_000) {
-        void endAndReset()
-        return
-      }
-      if (idle >= 240_000) {
-        setSeconds(Math.ceil((300_000 - idle) / 1000))
-        setDialog('idle')
-      }
+      if (Date.now() >= Date.parse(participant.access_expires_at)) expire()
     }, 1000)
-    return () => {
-      clearInterval(timer)
-      for (const name of ['pointerdown', 'keydown', 'scroll'])
-        window.removeEventListener(name, touch)
-    }
-  }, [screen, participant, dialog])
-
-  async function endAndReset() {
-    if (busyRef.current) return
-    const id = ++epoch.current
-    busyRef.current = true
-    setBusy(true)
-    clearPrivate()
-    setError('')
-    setScreen('ending')
-    let ended = false
-    try {
-      await api.end()
-      if (id !== epoch.current) return
-      channel.current?.postMessage('ended')
-      ended = true
-      const data = await api.current()
-      if (id === epoch.current) {
-        setCurrent(data)
-        setScreen('registration')
-      }
-    } catch (error) {
-      if (id === epoch.current) {
-        setError(errorMessage(error))
-        if (ended) setScreen('unavailable')
-      }
-    } finally {
-      finish(id)
-    }
-  }
+    return () => clearInterval(timer)
+  }, [participant])
 
   async function resume() {
     if (!participant) return
@@ -408,7 +284,6 @@ export function QuizFlow() {
     }
   }
 
-  const active = ['quiz', 'review', 'result', 'referral'].includes(screen)
   const step = ['registration', 'resume'].includes(screen)
     ? 1
     : ['quiz', 'review'].includes(screen)
@@ -417,14 +292,11 @@ export function QuizFlow() {
   return (
     <>
       <FlowLayout
-        active={active}
-        busy={busy}
         step={
           ['registration', 'resume', 'quiz', 'review', 'result', 'referral'].includes(screen)
             ? step
             : null
         }
-        onExit={() => setDialog('exit')}
       >
         {error && (
           <Alert severity="error" className="error-banner" tabIndex={-1} sx={{ mb: 3 }}>
@@ -454,25 +326,19 @@ export function QuizFlow() {
         {screen === 'resume' && (
           <StatusScreen
             tag="BEM-VINDO DE VOLTA"
-            title="Há uma participação aberta por aqui."
+            title="Continue sua participação."
             actions={
-              <>
-                <Button
-                  variant="contained"
-                  disabled={busy}
-                  loading={busy}
-                  onClick={() => void resume()}
-                >
-                  {busy ? 'Recuperando…' : 'Continuar minha participação'}
-                </Button>
-                <Button variant="outlined" disabled={busy} onClick={() => void endAndReset()}>
-                  Começar outra participação
-                </Button>
-              </>
+              <Button
+                variant="contained"
+                disabled={busy}
+                loading={busy}
+                onClick={() => void resume()}
+              >
+                {busy ? 'Recuperando…' : 'Continuar minha participação'}
+              </Button>
             }
           >
-            Se ela é sua, você pode continuar. Para outro aluno, encerre esta sessão e comece um
-            novo cadastro.
+            Retome seu quiz ou consulte seu resultado e encaminhamento.
             {participant?.status === 'draft' && (
               <Box component="span" sx={{ display: 'block', typography: 'caption', mt: 2 }}>
                 Marcações ainda não enviadas não são recuperadas após recarregar a página.
@@ -575,16 +441,9 @@ export function QuizFlow() {
               </Typography>
             </Paper>
             <Typography variant="caption" component="p" color="textSecondary" sx={{ mb: 3 }}>
-              Sua participação foi registrada. Ao terminar, encerre para liberar este dispositivo.
+              Sua participação foi registrada. Você pode voltar a esta página para consultar seu
+              encaminhamento enquanto sua sessão estiver válida.
             </Typography>
-            <Button
-              variant="contained"
-              disabled={busy}
-              onClick={() => void endAndReset()}
-              endIcon={<ArrowForwardRounded />}
-            >
-              Encerrar e liberar dispositivo
-            </Button>
           </Box>
         )}
         {screen === 'loading' && (
@@ -592,30 +451,12 @@ export function QuizFlow() {
             Só um instante.
           </StatusScreen>
         )}
-        {screen === 'ending' && (
-          <StatusScreen
-            tag="DISPOSITIVO COMPARTILHADO"
-            title="Encerrando a sessão"
-            loading={busy}
-            actions={
-              !busy && (
-                <Button variant="contained" onClick={() => void endAndReset()}>
-                  Tentar encerrar novamente
-                </Button>
-              )
-            }
-          >
-            {busy
-              ? 'Aguarde enquanto liberamos o dispositivo.'
-              : 'Precisamos confirmar o encerramento antes de um novo cadastro.'}
-          </StatusScreen>
-        )}
         {screen === 'expired' && (
           <StatusScreen
             tag="SESSÃO ENCERRADA"
             title="Vamos começar de novo?"
             actions={
-              <Button variant="contained" disabled={busy} onClick={() => void endAndReset()}>
+              <Button variant="contained" disabled={busy} onClick={() => void bootstrap()}>
                 Voltar ao início
               </Button>
             }
@@ -638,17 +479,6 @@ export function QuizFlow() {
           </StatusScreen>
         )}
       </FlowLayout>
-      {dialog && (
-        <Dialog
-          kind={dialog}
-          seconds={seconds}
-          onContinue={() => {
-            activity.current = Date.now()
-            setDialog(null)
-          }}
-          onEnd={() => void endAndReset()}
-        />
-      )}
     </>
   )
 }

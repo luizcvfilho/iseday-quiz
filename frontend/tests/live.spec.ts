@@ -42,9 +42,10 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
     path: testInfo.outputPath('encaminhamento-desktop.png'),
     fullPage: true,
   })
-  await page.getByRole('button', { name: 'Encerrar e liberar dispositivo' }).click()
-  await expect(page.getByLabel('Nome completo')).toHaveValue('')
-  expect((await page.request.get('/api/participations/me')).status()).toBe(401)
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar minha participação' }).click()
+  await expect(page.getByRole('heading', { name: 'Vamos conhecer de perto?' })).toBeVisible()
+  expect((await page.request.get('/api/participations/me')).status()).toBe(200)
   expect((await page.request.get('/api/admin/participations')).status()).toBe(401)
   await page.goto('/admin')
   await expect(page.getByRole('heading', { name: 'Entrar na administração' })).toBeVisible()

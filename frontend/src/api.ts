@@ -107,7 +107,6 @@ export const api = {
   submit: (ids: string[]) => request<Result>('/participations/me/submit', { statement_ids: ids }),
   result: () => request<Result>('/participations/me/result'),
   feedback: (data: Feedback) => request<Referral>('/participations/me/feedback', data),
-  end: () => request<void>('/participations/me/end', {}),
 }
 
 export function errorMessage(error: unknown): string {

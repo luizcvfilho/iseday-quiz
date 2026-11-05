@@ -125,7 +125,9 @@ def register(
     existing = find_participation(session, existing_token)
     if existing and existing.access_expires_at > session.scalar(select(func.clock_timestamp())):
         if any(getattr(existing, key) != value for key, value in data.model_dump().items()):
-            raise HTTPException(409, "Encerre a sessão atual antes de iniciar outro cadastro.")
+            raise HTTPException(
+                409, "Já existe uma participação em andamento. Atualize a página para retomá-la."
+            )
         return session_summary(existing), existing_token, False
 
     # A share lock synchronizes with archival/publication. A stale version from a

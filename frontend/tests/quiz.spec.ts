@@ -32,7 +32,6 @@ async function mockApi(page: Page) {
     loseSubmit: false,
     loseFeedback: false,
     failRead: false,
-    failEnd: false,
     failCurrent: false,
   }
   await page.route('**/api/**', async (route) => {
@@ -119,10 +118,6 @@ async function mockApi(page: Page) {
     }
     if (path === '/api/participations/me/end') {
       state.ends++
-      if (state.failEnd) {
-        state.failEnd = false
-        return route.abort('failed')
-      }
       state.session = null
       return route.fulfill({ status: 204 })
     }
@@ -153,7 +148,7 @@ async function selectAndSubmit(page: Page) {
   ).toBeVisible()
 }
 
-test('cadastro, limite, edição, empates, confirmação e limpeza', async ({ page }) => {
+test('cadastro, limite, edição, empates e confirmação preservam o encaminhamento', async ({ page }) => {
   const state = await mockApi(page)
   await register(page)
   await expect(page.getByRole('button', { name: 'Revisar escolhas' })).toBeDisabled()
@@ -178,10 +173,10 @@ test('cadastro, limite, edição, empates, confirmação e limpeza', async ({ pa
   await page.getByLabel('Qual curso você quer conhecer?').selectOption('c2')
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
   await expect(page.getByRole('heading', { name: 'Espaço de Saúde' })).toBeVisible()
-  await page.getByRole('button', { name: 'Encerrar e liberar dispositivo' }).click()
-  await expect(page.getByLabel('Nome completo')).toHaveValue('')
-  await expect(page.getByRole('textbox', { name: /^E-mail/ })).toHaveValue('')
-  expect(state.ends).toBe(1)
+  await expect(
+    page.getByRole('button', { name: /Encerrar|Começar outra participação/ }),
+  ).toHaveCount(0)
+  expect(state.ends).toBe(0)
   expect(state.registrations).toBe(1)
   expect(
     await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length })),
@@ -227,8 +222,9 @@ test('rascunho retoma sua versão e resultado concluído retoma o encaminhamento
   await page.getByRole('checkbox').first().check()
   await page.reload()
   await expect(
-    page.getByRole('heading', { name: 'Há uma participação aberta por aqui.' }),
+    page.getByRole('heading', { name: 'Continue sua participação.' }),
   ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Começar outra participação' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Continuar minha participação' }).click()
   await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(0)
   await selectAndSubmit(page)
@@ -240,29 +236,43 @@ test('rascunho retoma sua versão e resultado concluído retoma o encaminhamento
   await expect(page.getByRole('heading', { name: 'SPA', exact: true })).toBeVisible()
 })
 
-test('avisa sobre inatividade e limpa os contatos após cinco minutos', async ({ page }) => {
+test('cadastro permanece preenchido após mais de cinco minutos sem interação', async ({ page }) => {
   await page.clock.install()
-  await mockApi(page)
+  const state = await mockApi(page)
   await page.goto('/')
   await page.getByLabel('Nome completo').fill('Contato temporário')
   await page.clock.fastForward(241_000)
-  await expect(page.getByRole('dialog')).toBeVisible()
-  await page.getByRole('button', { name: 'Continuar participação', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.clock.fastForward(120_000)
   await expect(page.getByLabel('Nome completo')).toHaveValue('Contato temporário')
-  await page.clock.fastForward(301_000)
-  await expect(page.getByLabel('Nome completo')).toHaveValue('')
+  expect(state.ends).toBe(0)
 })
 
-test('falha ao encerrar bloqueia outro cadastro e permite tentar novamente', async ({ page }) => {
+test('escolhas, resultado e encaminhamento permanecem após pausas sem interação', async ({ page }) => {
+  await page.clock.install()
   const state = await mockApi(page)
   await register(page)
-  state.failEnd = true
-  await page.getByRole('button', { name: 'Encerrar participação' }).click()
-  await page.getByRole('button', { name: 'Encerrar e limpar' }).click()
-  await expect(page.getByRole('button', { name: 'Tentar encerrar novamente' })).toBeVisible()
-  await expect(page.getByLabel('Nome completo')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Tentar encerrar novamente' }).click()
-  await expect(page.getByLabel('Nome completo')).toHaveValue('')
+  await page.getByRole('checkbox').first().check()
+  await page.clock.fastForward(361_000)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(1)
+  for (let i = 1; i < 25; i++) await page.getByRole('checkbox').nth(i).check()
+  await page.getByRole('button', { name: 'Revisar escolhas' }).click()
+  await page.clock.fastForward(361_000)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(
+    page.getByRole('list', { name: 'Suas 25 escolhas' }).getByRole('listitem'),
+  ).toHaveCount(25)
+  await page.getByRole('button', { name: 'Confirmar 25 escolhas' }).click()
+  await page.clock.fastForward(361_000)
+  await expect(page.getByRole('heading', { name: 'Saúde', exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.getByRole('radio', { name: 'Não me identifiquei' }).check()
+  await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
+  await page.clock.fastForward(361_000)
+  await expect(page.getByRole('heading', { name: 'SPA', exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(state.ends).toBe(0)
 })
 
 test('sessão expirada remove o conteúdo da participação', async ({ page }) => {
@@ -276,6 +286,10 @@ test('sessão expirada remove o conteúdo da participação', async ({ page }) =
   await page.clock.fastForward(5000)
   await expect(page.getByRole('heading', { name: 'Vamos começar de novo?' })).toBeVisible()
   await expect(page.getByRole('checkbox')).toHaveCount(0)
+  state.session = null
+  await page.getByRole('button', { name: 'Voltar ao início' }).click()
+  await expect(page.getByLabel('Nome completo')).toHaveValue('')
+  expect(state.ends).toBe(0)
 })
 
 test('telefone inválido e escola ausente têm mensagens acionáveis', async ({ page }) => {

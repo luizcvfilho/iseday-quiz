@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import {
   AppBar,
   Box,
-  Button,
   Container,
   Link,
   Stack,
@@ -12,21 +11,14 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material'
-import LogoutRounded from '@mui/icons-material/LogoutRounded'
 import { brand } from '../theme'
 
 export function FlowLayout({
   children,
-  active,
-  busy,
   step,
-  onExit,
 }: {
   children: ReactNode
-  active: boolean
-  busy: boolean
   step: number | null
-  onExit: () => void
 }) {
   return (
     <>
@@ -97,25 +89,13 @@ export function FlowLayout({
               QUIZ DE AFINIDADES
             </Typography>
             <Box sx={{ ml: 'auto' }}>
-              {active ? (
-                <Button
-                  variant="text"
-                  disabled={busy}
-                  onClick={onExit}
-                  endIcon={<LogoutRounded />}
-                  sx={{ fontSize: { xs: '.7rem', sm: '.8rem' }, px: { xs: 0.5, sm: 1.5 } }}
-                >
-                  Encerrar participação
-                </Button>
-              ) : (
-                <Typography
-                  variant="overline"
-                  color="primary"
-                  sx={{ display: { xs: 'none', md: 'block' } }}
-                >
-                  Seu próximo passo começa aqui
-                </Typography>
-              )}
+              <Typography
+                variant="overline"
+                color="primary"
+                sx={{ display: { xs: 'none', md: 'block' } }}
+              >
+                Seu próximo passo começa aqui
+              </Typography>
             </Box>
           </Toolbar>
         </Container>
