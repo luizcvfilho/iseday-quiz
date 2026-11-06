@@ -146,32 +146,6 @@ TEST_DATABASE_URL=postgresql+psycopg://usuario:senha@localhost:5432/iseday_test 
 
 O nome do banco deve terminar em `_test`. Os testes criam e removem apenas esquemas aleatórios próprios; o usuário precisa de permissão para criar esquemas. `REQUIRE_POSTGRES_TESTS=1` faz a ausência de `TEST_DATABASE_URL` falhar em vez de ignorar os testes, para uso em CI.
 
-## Banco e migrações
-
-Os 12 modelos do domínio estão em `backend/app/models.py`. As revisões `0001` e `0002` são o histórico do esquema anterior. A revisão `0003` remove `quiz_versions` e todos os vínculos de versão, instala o catálogo único com 74 afirmativas e 9 cursos e bloqueia alterações no catálogo. Distribua juntos `0003_single_quiz.py`, `0003_single_quiz.sql` e `backend/catalog/quiz-final.json`.
-
-**Atualização de instalações existentes:** a migração `0003` apaga as versões e as participações de teste anteriores, incluindo escolhas, resultados e confirmações. Contas, sessões administrativas e auditoria são preservadas. A remoção é definitiva; o downgrade dessa revisão é bloqueado. Para voltar ao esquema anterior, restaure um backup anterior à migração. Pare a API antiga antes de migrar e reinicie com o código atualizado.
-
-No desenvolvimento local, `make dev` aplica as migrações automaticamente; com a API no Docker Compose, use `make migrate`. Não use `create_all` nem execute `docs/database-schema.sql`: esse arquivo é a proposta histórica, não uma migração.
-
-Para preparar um banco vazio ou atualizar o banco local:
-
-```bash
-cd backend
-uv run --frozen alembic upgrade head
-uv run --frozen alembic current
-```
-
-No Compose: `docker compose exec api uv run --no-sync alembic upgrade head`.
-
-A migração exige PostgreSQL, carrega o catálogo fixo automaticamente e não cria contas administrativas. Não há importação, publicação, arquivamento ou edição de perguntas/pesos pelo painel. O catálogo é compartilhado por todas as participações; seus identificadores são estáveis. Triggers bloqueiam inserção, atualização, exclusão e `TRUNCATE` das tabelas de catálogo.
-
-A submissão exige 25 escolhas únicas e resultados de todas as áreas/cursos. Respostas, resultados e cadastro submetidos são imutáveis, com exceção dos campos de sessão e conclusão. O feedback só aceita um curso sugerido quando há concordância. A exclusão da participação inteira remove seus dados dependentes; a auditoria pode sobreviver à exclusão. Bloqueios da participação serializam submissões e confirmações concorrentes.
-
-Alterações futuras no esquema devem usar uma nova revisão Alembic; não edite revisões já aplicadas. O conteúdo do quiz é fixo e não tem editor administrativo.
-
-`docker compose down` encerra os serviços e preserva os dados. O volume `postgres_data` guarda o PostgreSQL. As variáveis `POSTGRES_*` inicializam apenas um volume vazio: alterar o `.env` não troca as credenciais de um banco já criado.
-
 ## Estrutura
 
 ```text

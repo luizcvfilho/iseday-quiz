@@ -45,8 +45,6 @@ docker compose --env-file .env.production -f compose.production.yaml exec api /a
 
 Abra `https://SEU_DOMINIO/admin` para acompanhar as participações. O catálogo fixo de 74 afirmativas e 9 cursos é instalado automaticamente pelas migrações; não existe publicação de versões. O aviso institucional continua obrigatório. As migrações não criam usuários.
 
-A revisão `0003` remove as versões e todas as participações de teste existentes, preservando administradores e auditoria. Ela não tem downgrade: o retorno ao modelo anterior exige restauração de backup. Aplique-a com a API antiga parada e com os arquivos `0003_single_quiz.py`, `0003_single_quiz.sql` e `catalog/quiz-final.json` presentes na imagem.
-
 Verifique os endpoints no domínio publicado:
 
 ```bash

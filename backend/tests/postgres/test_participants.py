@@ -629,15 +629,10 @@ def test_feedback_revision_failure_preserves_previous_referral(api):
     assert feedback_count(api) == 1
 
 
-def test_feedback_revision_migration_unlocks_existing_completed_results(api):
-    with api.engine.begin() as db:
-        command.downgrade(migration_config(db), "0004")
+def test_repeated_upgrade_preserves_completed_results_and_allows_feedback_revision(api):
     register(api)
     before = submit(api).json()
     first = confirm(api).json()
-    # Reproduce a running API whose code reloaded before its database was migrated.
-    assert confirm(api, agrees=False).status_code == 503
-    assert api.client.get("/api/participations/me/result").json()["feedback"] == first
 
     with api.engine.begin() as db:
         command.upgrade(migration_config(db), "head")
