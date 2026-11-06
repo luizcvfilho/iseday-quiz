@@ -282,25 +282,32 @@ def record_feedback(session: Session, participant: Participation, data: Feedback
         return previous
 
     if data.agrees_with_result:
-        row = session.execute(
-            select(Course, Area)
-            .join(Area, Area.id == Course.area_id)
+        query = (
+            select(Course)
             .join(ParticipationCourseResult, ParticipationCourseResult.course_id == Course.id)
             .where(
                 ParticipationCourseResult.participation_id == participant.id,
                 ParticipationCourseResult.is_recommended.is_(True),
-                Course.id == data.chosen_course_id,
             )
-        ).one_or_none()
-        if row is None:
-            raise HTTPException(422, "Escolha um dos cursos sugeridos para esta participação.")
-        course, area = row
-        # A course destination is an optional pair; otherwise use its area's exact
-        # configured destination. Never guess a laboratory or mix the two pairs.
-        if course.destination is not None:
-            destination, instructions = course.destination, course.destination_instructions
+            .order_by(Course.name, Course.id)
+        )
+        # Accept an explicit course from older clients; the current flow uses every
+        # saved recommendation, preserving ties without asking the student to choose.
+        if data.chosen_course_id is not None:
+            query = query.where(Course.id == data.chosen_course_id)
+        courses = list(session.scalars(query))
+        if not courses:
+            raise HTTPException(422, "Não foi possível encontrar os cursos sugeridos.")
+        if len(courses) == 1:
+            destination = f"Estande de {courses[0].name} — Ginásio"
+            instructions = (
+                f"Vá ao ginásio e visite o estande de {courses[0].name} "
+                "para conhecer o curso e conversar com a equipe."
+            )
         else:
-            destination, instructions = area.destination, area.destination_instructions
+            destination = "Estandes dos cursos indicados — Ginásio"
+            instructions = "Vá ao ginásio e visite os estandes dos cursos indicados pelo quiz:\n"
+            instructions += "\n".join(f"• {course.name}" for course in courses)
     else:
         destination, instructions = PSYCHOLOGY_DESTINATION, PSYCHOLOGY_INSTRUCTIONS
 

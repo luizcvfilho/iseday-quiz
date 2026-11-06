@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from fastapi.testclient import TestClient
-from sqlalchemy import event, func, select, text, update
+from sqlalchemy import delete, event, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -20,6 +20,7 @@ from app.models import (
     ParticipationCourseResult,
     ParticipationFeedback,
     ParticipationSelection,
+    StatementCourseWeight,
 )
 from app.participants import service
 from app.participants.security import token_hash
@@ -368,8 +369,11 @@ def test_feedback_accepts_any_recommended_course_and_preserves_scores(api, cours
     assert body["participation_id"] == before["participation_id"]
     assert body["status"] == "completed" and body["agrees_with_result"] is True
     assert body["chosen_course_id"] == str(course)
-    assert body["destination"] == "Space"
-    assert body["destination_instructions"] == "Go to the indicated space"
+    assert body["destination"] == f"Estande de Course {course_index} — Ginásio"
+    assert body["destination_instructions"] == (
+        f"Vá ao ginásio e visite o estande de Course {course_index} "
+        "para conhecer o curso e conversar com a equipe."
+    )
     assert datetime.fromisoformat(body["answered_at"]) >= datetime.fromisoformat(
         before["submitted_at"]
     )
@@ -390,7 +394,7 @@ def test_feedback_accepts_any_recommended_course_and_preserves_scores(api, cours
     assert feedback_count(api) == 1 and counts(api) == [25, 2, 3]
     with Session(api.engine) as session:
         persisted = session.get(ParticipationFeedback, UUID(body["participation_id"]))
-        assert persisted.chosen_course_id == course and persisted.destination == "Space"
+        assert persisted.chosen_course_id == course and persisted.destination == body["destination"]
         participant = session.get(Participation, UUID(body["participation_id"]))
         assert participant.completed_at == persisted.answered_at
 
@@ -402,13 +406,57 @@ def test_feedback_accepts_any_recommended_course_and_preserves_scores(api, cours
     ],
     indirect=True,
 )
-def test_feedback_prefers_complete_course_destination_pair(api):
+def test_feedback_uses_gym_instead_of_old_course_destination(api):
     register(api)
     submit(api)
     body = confirm(api, course=api.quiz.courses[0]).json()
-    assert body["destination"] == "Laboratório de teste"
-    assert body["destination_instructions"] == "Siga para a sala de teste 2."
+    assert body["destination"] == "Estande de Course 0 — Ginásio"
+    assert "Vá ao ginásio e visite o estande de Course 0" in body["destination_instructions"]
     assert confirm(api, course=api.quiz.courses[0]).json() == body
+
+
+def test_agreement_without_course_refers_to_all_saved_recommendations(api):
+    register(api)
+    before = submit(api).json()
+    response = api.client.post(
+        "/api/participations/me/feedback", headers=WRITE, json={"agrees_with_result": True}
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["chosen_course_id"] is None
+    assert body["destination"] == "Estandes dos cursos indicados — Ginásio"
+    assert body["destination_instructions"] == (
+        "Vá ao ginásio e visite os estandes dos cursos indicados pelo quiz:\n• Course 0\n• Course 2"
+    )
+    assert confirm(api).json() == body
+    after = api.client.get("/api/participations/me/result").json()
+    assert after["feedback"] == body
+    assert after["courses"] == before["courses"] and after["areas"] == before["areas"]
+    assert feedback_count(api) == 1
+    assert confirm(api, agrees=False).status_code == 409
+
+
+def test_agreement_without_course_refers_to_the_single_recommendation(api):
+    with api.engine.begin() as db:
+        db.execute(text("ALTER TABLE statement_course_weights DISABLE TRIGGER USER"))
+        db.execute(
+            delete(StatementCourseWeight).where(
+                StatementCourseWeight.course_id == api.quiz.courses[2]
+            )
+        )
+        db.execute(text("ALTER TABLE statement_course_weights ENABLE TRIGGER USER"))
+    register(api)
+    submit(api)
+    response = confirm(api)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["chosen_course_id"] is None
+    assert body["destination"] == "Estande de Course 0 — Ginásio"
+    assert body["destination_instructions"] == (
+        "Vá ao ginásio e visite o estande de Course 0 "
+        "para conhecer o curso e conversar com a equipe."
+    )
+    assert confirm(api).json() == body
 
 
 def test_negative_feedback_uses_fixed_psychology_destination(api):
@@ -417,8 +465,11 @@ def test_negative_feedback_uses_fixed_psychology_destination(api):
     response = confirm(api, agrees=False)
     body = response.json()
     assert body["agrees_with_result"] is False and body["chosen_course_id"] is None
-    assert body["destination"] == "SPA"
-    assert body["destination_instructions"] == "Procure a equipe de Psicologia no SPA."
+    assert body["destination"] == "Estande de Psicologia — Ginásio"
+    assert body["destination_instructions"] == (
+        "Vá ao ginásio e visite o estande de Psicologia para conversar com a equipe "
+        "sobre seus interesses e explorar outras possibilidades."
+    )
     assert confirm(api, agrees=False).json() == body
     api.settings.privacy_notice_text = None
     assert api.client.get("/api/participations/me/result").json()["feedback"] == body
@@ -429,7 +480,6 @@ def test_negative_feedback_uses_fixed_psychology_destination(api):
 @pytest.mark.parametrize(
     "payload",
     [
-        {"agrees_with_result": True},
         {"agrees_with_result": True, "chosen_course_id": "invalid"},
         {"agrees_with_result": False, "chosen_course_id": str(uuid4())},
         {"agrees_with_result": "false"},
@@ -514,7 +564,7 @@ def test_feedback_is_private_and_end_keeps_completed_history(api):
         )
         own = confirm(api, agrees=False, client=other).json()
         assert own["participation_id"] == second["id"] != first["participation_id"]
-        assert own["destination"] == "SPA"
+        assert own["destination"] == "Estande de Psicologia — Ginásio"
         assert api.client.get("/api/participations/me/result").json()["feedback"] == first
     token = api.client.cookies.get("iseday_participant")
     assert api.client.post("/api/participations/me/end", headers=WRITE).status_code == 204

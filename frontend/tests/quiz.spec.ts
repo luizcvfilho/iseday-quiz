@@ -104,17 +104,21 @@ async function mockApi(page: Page) {
     if (path === '/api/participations/me/feedback') {
       state.feedbacks++
       const body = request.postDataJSON()
+      expect(body).toEqual({ agrees_with_result: expect.any(Boolean) })
       state.session!.status = 'completed'
       const feedback = {
         ...body,
+        chosen_course_id: null,
         participation_id: 'participant-1',
         status: 'completed',
         completed_at: new Date().toISOString(),
         answered_at: new Date().toISOString(),
-        destination: body.agrees_with_result ? 'Espaço de Saúde' : 'SPA',
+        destination: body.agrees_with_result
+          ? 'Estandes dos cursos indicados — Ginásio'
+          : 'Estande de Psicologia — Ginásio',
         destination_instructions: body.agrees_with_result
-          ? 'Procure a equipe no espaço indicado.'
-          : 'Procure a equipe de Psicologia no SPA.',
+          ? 'Vá ao ginásio e visite os estandes dos cursos indicados pelo quiz:\n• Enfermagem\n• Fisioterapia\n• Engenharia Civil'
+          : 'Vá ao ginásio e visite o estande de Psicologia para conversar com a equipe.',
       }
       state.saved = { ...state.saved!, status: 'completed', feedback }
       if (state.loseFeedback) {
@@ -173,29 +177,28 @@ test('cadastro, limite, edição, empates e confirmação preservam o encaminham
   await page.getByRole('button', { name: 'Confirmar 25 escolhas' }).click()
   await expect(page.getByRole('heading', { name: 'Saúde', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Engenharia', exact: true })).toBeVisible()
-  const healthCard = page.getByRole('article').filter({
-    has: page.getByRole('heading', { name: 'Saúde', exact: true }),
-  })
-  const engineeringCard = page.getByRole('article').filter({
-    has: page.getByRole('heading', { name: 'Engenharia', exact: true }),
-  })
-  await expect(healthCard.getByText('CEMA, SPA, Anatômico e complexo esportivo')).toBeVisible()
-  await expect(
-    engineeringCard.getByText('Laboratório de práticas tecnológicas e engenharia'),
-  ).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Espaços de vivência' })).toHaveCount(2)
+  await expect(page.getByRole('heading', { name: 'Espaços de vivência' })).toHaveCount(0)
+  await expect(page.getByText('CEMA, SPA, Anatômico e complexo esportivo')).toHaveCount(0)
   await expect(page.getByText('Ver pontuação por área')).toHaveCount(0)
   await expect(page.getByText(/\d+ pontos?/)).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Ver meu encaminhamento' })).toBeDisabled()
-  await page.getByRole('radio', { name: 'Sim, faz sentido' }).check()
-  await expect(page.getByRole('button', { name: 'Ver meu encaminhamento' })).toBeDisabled()
-  await expect(page.getByLabel('Qual curso você quer conhecer?').getByRole('option')).toHaveCount(4)
-  await page.getByLabel('Qual curso você quer conhecer?').selectOption('c2')
+  await page.getByRole('radio', { name: 'Concordo com o resultado' }).check()
+  await expect(page.getByRole('button', { name: 'Ver meu encaminhamento' })).toBeEnabled()
+  await expect(page.getByRole('combobox')).toHaveCount(0)
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
-  await expect(page.getByRole('heading', { name: 'Espaço de Saúde' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Estandes dos cursos indicados — Ginásio' }),
+  ).toBeVisible()
   await expect(
     page.getByRole('button', { name: /Encerrar|Começar outra participação/ }),
   ).toHaveCount(0)
+  await expect(page.getByText(/Vá ao ginásio e visite os estandes/)).toContainText('Fisioterapia')
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar minha participação' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Estandes dos cursos indicados — Ginásio' }),
+  ).toBeVisible()
+  expect(state.feedbacks).toBe(1)
   expect(state.ends).toBe(0)
   expect(state.registrations).toBe(1)
   expect(
@@ -209,9 +212,11 @@ test('perda da resposta de submissão e feedback recupera histórico', async ({ 
   state.loseFeedback = true
   await register(page)
   await selectAndSubmit(page)
-  await page.getByRole('radio', { name: 'Não me identifiquei' }).check()
+  await page.getByRole('radio', { name: 'Não concordo' }).check()
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
-  await expect(page.getByRole('heading', { name: 'SPA', exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Estande de Psicologia — Ginásio', exact: true }),
+  ).toBeVisible()
   expect(state.submissions).toBe(1)
   expect(state.feedbacks).toBe(1)
 })
@@ -248,12 +253,16 @@ test('participação retoma o quiz e resultado concluído retoma o encaminhament
   await page.getByRole('button', { name: 'Continuar minha participação' }).click()
   await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(0)
   await selectAndSubmit(page)
-  await page.getByRole('radio', { name: 'Não me identifiquei' }).check()
+  await page.getByRole('radio', { name: 'Não concordo' }).check()
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
-  await expect(page.getByRole('heading', { name: 'SPA', exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Estande de Psicologia — Ginásio', exact: true }),
+  ).toBeVisible()
   await page.reload()
   await page.getByRole('button', { name: 'Continuar minha participação' }).click()
-  await expect(page.getByRole('heading', { name: 'SPA', exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Estande de Psicologia — Ginásio', exact: true }),
+  ).toBeVisible()
 })
 
 test('cadastro permanece preenchido após mais de cinco minutos sem interação', async ({ page }) => {
@@ -287,10 +296,12 @@ test('escolhas, resultado e encaminhamento permanecem após pausas sem interaç�
   await page.clock.fastForward(361_000)
   await expect(page.getByRole('heading', { name: 'Saúde', exact: true })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await page.getByRole('radio', { name: 'Não me identifiquei' }).check()
+  await page.getByRole('radio', { name: 'Não concordo' }).check()
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
   await page.clock.fastForward(361_000)
-  await expect(page.getByRole('heading', { name: 'SPA', exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Estande de Psicologia — Ginásio', exact: true }),
+  ).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(state.ends).toBe(0)
 })
@@ -362,11 +373,13 @@ test('layout móvel permite chegar ao encaminhamento sem rolagem horizontal', as
   await register(page)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await selectAndSubmit(page)
-  await expect(page.getByText('CEMA, SPA, Anatômico e complexo esportivo')).toBeVisible()
-  await expect(page.getByText('Laboratório de práticas tecnológicas e engenharia')).toBeVisible()
+  await expect(page.getByRole('article')).toHaveCount(2)
+  await expect(page.getByRole('combobox')).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await page.getByRole('radio', { name: 'Não me identifiquei' }).check()
+  await page.getByRole('radio', { name: 'Não concordo' }).check()
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
-  await expect(page.getByRole('heading', { name: 'SPA', exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Estande de Psicologia — Ginásio', exact: true }),
+  ).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })

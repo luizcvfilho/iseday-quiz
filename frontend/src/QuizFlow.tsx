@@ -413,8 +413,8 @@ export function QuizFlow() {
               }
             >
               {referral.agrees_with_result
-                ? 'Sua descoberta continua pelo campus. Siga o encaminhamento abaixo.'
-                : 'Tudo bem não se identificar. A equipe de Psicologia pode ajudar você a explorar outras possibilidades.'}
+                ? 'Sua descoberta continua no ginásio. Visite os estandes indicados abaixo.'
+                : 'Tudo bem não se identificar. Visite o estande de Psicologia no ginásio para explorar outras possibilidades.'}
             </SectionHeading>
             <Paper
               variant="outlined"

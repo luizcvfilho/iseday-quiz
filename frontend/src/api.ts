@@ -24,8 +24,9 @@ export type Course = {
   score: number
   is_recommended: boolean
 }
-export type Feedback = { agrees_with_result: boolean; chosen_course_id: string | null }
+export type Feedback = { agrees_with_result: boolean }
 export type Referral = Feedback & {
+  chosen_course_id: string | null
   participation_id: string
   status: 'completed'
   completed_at: string

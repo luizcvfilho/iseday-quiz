@@ -172,12 +172,18 @@ def test_feedback_requires_recommended_course(db, quiz, submitted):
         feedback(db, submitted, course=quiz.courses[1])
 
 
-@pytest.mark.parametrize("agrees,chosen", [(True, None), (False, 0)])
-def test_feedback_choice_matches_agreement(db, quiz, submitted, agrees, chosen):
+def test_feedback_disagreement_rejects_a_course(db, quiz, submitted):
     with pytest.raises(DBAPIError), db.begin_nested():
-        feedback(
-            db, submitted, agrees=agrees, course=None if chosen is None else quiz.courses[chosen]
-        )
+        feedback(db, submitted, agrees=False, course=quiz.courses[0])
+
+
+def test_feedback_allows_agreement_without_a_course(db, submitted):
+    feedback(db, submitted, agrees=True)
+    db.execute(
+        update(Participation).values(status="completed", completed_at=func.clock_timestamp())
+    )
+    assert db.scalar(select(ParticipationFeedback.agrees_with_result)) is True
+    assert db.scalar(select(ParticipationFeedback.chosen_course_id)) is None
 
 
 def test_completion_requires_feedback(db, submitted):

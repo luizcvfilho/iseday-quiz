@@ -6,13 +6,14 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from sqlalchemy import event, inspect, select, text
+from sqlalchemy import event, inspect, select, text, update
 from sqlalchemy.orm import Session
 
 from app.db import Base
-from app.models import AdminAuditLog, AdminSession, AdminUser
+from app.models import AdminAuditLog, AdminSession, AdminUser, Participation
 
 from .conftest import migration_config
+from .helpers import catalog, feedback, participation, results, selections, submit
 
 pytestmark = pytest.mark.postgres
 
@@ -140,7 +141,7 @@ def test_upgrade_resets_test_data_preserves_admins_and_matches_metadata(empty_da
         assert set(inspect(connection).get_table_names()) == set(Base.metadata.tables) | {
             "alembic_version"
         }
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0003"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0004"
         assert (
             compare_metadata(
                 MigrationContext.configure(connection, opts={"compare_server_default": True}),
@@ -225,3 +226,43 @@ def test_orm_defaults_sessions_and_audit_retention(db):
         assert session.scalar(select(AdminSession)) is None
         audit = session.scalar(select(AdminAuditLog))
         assert audit.id > 0 and audit.admin_user_id is None
+
+
+def test_automatic_referral_migration_preserves_history_and_accepts_no_course(empty_database):
+    with empty_database.begin() as connection:
+        command.upgrade(migration_config(connection), "0003")
+        quiz = catalog(connection)
+        completed = participation(connection, quiz)
+        pending = participation(connection, quiz)
+        for participant in (completed, pending):
+            selections(connection, quiz, participant)
+            results(connection, quiz, participant)
+            submit(connection, participant)
+        feedback(connection, completed, course=quiz.courses[0])
+        connection.execute(
+            update(Participation)
+            .where(Participation.id == completed)
+            .values(status="completed", completed_at=datetime.now(UTC))
+        )
+        before = connection.execute(
+            text("SELECT * FROM participation_feedback WHERE participation_id = :id"),
+            {"id": completed},
+        ).one()
+        command.upgrade(migration_config(connection), "head")
+        after = connection.execute(
+            text("SELECT * FROM participation_feedback WHERE participation_id = :id"),
+            {"id": completed},
+        ).one()
+        assert after == before
+        feedback(connection, pending, agrees=True)
+        connection.execute(
+            update(Participation)
+            .where(Participation.id == pending)
+            .values(status="completed", completed_at=datetime.now(UTC))
+        )
+        assert (
+            connection.scalar(
+                text("SELECT status FROM participations WHERE id = :id"), {"id": pending}
+            )
+            == "completed"
+        )

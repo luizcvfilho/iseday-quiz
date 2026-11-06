@@ -663,8 +663,8 @@
   "scoring_method": "area_distinct_count_course_sum_v1",
   "weight_per_link": 1,
   "required_selection_count": 25,
-  "psychology_destination": "SPA",
-  "psychology_instructions": "Procure a equipe de Psicologia no SPA.",
+  "psychology_destination": "Estande de Psicologia — Ginásio",
+  "psychology_instructions": "Vá ao ginásio e visite o estande de Psicologia para conversar com a equipe sobre seus interesses e explorar outras possibilidades.",
   "area_destination_instructions": "Referência da planilha por área; confirmar localização e encaminhamento com a instituição.",
   "counts": {
     "statements": 74,

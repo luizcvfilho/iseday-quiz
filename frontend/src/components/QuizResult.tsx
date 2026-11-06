@@ -14,7 +14,6 @@ import {
   Radio,
   RadioGroup,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded'
@@ -35,7 +34,6 @@ export function QuizResult({
   onConfirm: (data: Feedback) => void
 }) {
   const [agrees, setAgrees] = useState<boolean | null>(null)
-  const [course, setCourse] = useState('')
   const winners = result.areas.filter((a) => a.is_winner)
   const recommended = result.courses.filter((c) => c.is_recommended)
   return (
@@ -55,7 +53,7 @@ export function QuizResult({
         }
       >
         Suas escolhas apontam afinidade com {winners.length === 1 ? 'esta área' : 'estas áreas'}.
-        Conheça os cursos que se destacaram em cada uma e os espaços de vivência no campus.
+        Conheça os cursos que se destacaram em cada uma e visite seus estandes no ginásio.
       </SectionHeading>
       <Box
         sx={{
@@ -102,14 +100,6 @@ export function QuizResult({
                     </ListItem>
                   ))}
               </List>
-              <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #ffffff40' }}>
-                <Typography component="h3" variant="caption" sx={{ color: '#dceefa' }}>
-                  Espaços de vivência
-                </Typography>
-                <Typography sx={{ mt: 1, overflowWrap: 'anywhere' }}>
-                  {area.destination}
-                </Typography>
-              </Box>
             </CardContent>
           </Card>
         ))}
@@ -124,8 +114,8 @@ export function QuizResult({
         sx={{ p: { xs: 2.5, sm: 4 } }}
         onSubmit={(event) => {
           event.preventDefault()
-          if (agrees !== null && (!agrees || course) && !busy)
-            onConfirm({ agrees_with_result: agrees, chosen_course_id: agrees ? course : null })
+          if (agrees !== null && !busy && !uncertain)
+            onConfirm({ agrees_with_result: agrees })
         }}
       >
         <FormControl component="fieldset" disabled={busy || uncertain} fullWidth>
@@ -141,13 +131,12 @@ export function QuizResult({
             value={agrees === null ? '' : agrees ? 'yes' : 'no'}
             onChange={(_, value) => {
               setAgrees(value === 'yes')
-              if (value === 'no') setCourse('')
             }}
             sx={{ gap: 1.5, mb: 3 }}
           >
             {[
-              { value: 'yes', label: 'Sim, faz sentido', selected: agrees === true },
-              { value: 'no', label: 'Não me identifiquei', selected: agrees === false },
+              { value: 'yes', label: 'Concordo com o resultado', selected: agrees === true },
+              { value: 'no', label: 'Não concordo', selected: agrees === false },
             ].map((option) => (
               <Paper
                 key={option.value}
@@ -173,38 +162,17 @@ export function QuizResult({
               </Paper>
             ))}
           </RadioGroup>
-          {agrees === true && (
-            <TextField
-              id="chosen-course"
-              select
-              label="Qual curso você quer conhecer?"
-              required
-              value={course}
-              disabled={busy || uncertain}
-              onChange={(event) => setCourse(event.target.value)}
-              helperText="Sua escolha não altera a pontuação do quiz."
-              slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
-              sx={{ maxWidth: 600, mb: 3 }}
-            >
-              <option value="">Escolha entre os cursos sugeridos</option>
-              {recommended.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · {winners.find((a) => a.id === c.area_id)?.name}
-                </option>
-              ))}
-            </TextField>
-          )}
           {agrees === false && (
             <Alert severity="info" sx={{ mb: 3 }}>
-              A equipe de Psicologia no SPA pode conversar com você sobre seus interesses e
-              possibilidades.
+              Visite o estande de Psicologia no ginásio para conversar sobre seus interesses e
+              explorar outras possibilidades.
             </Alert>
           )}
         </FormControl>
         <Button
           variant="contained"
           type="submit"
-          disabled={busy || agrees === null || (agrees && !course)}
+          disabled={busy || uncertain || agrees === null}
           loading={busy}
           loadingPosition="end"
           endIcon={<ArrowForwardRounded />}

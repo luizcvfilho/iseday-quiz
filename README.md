@@ -291,18 +291,11 @@ O envio recebe `{"statement_ids": ["uuid-1", "uuid-2", "..."]}`, com exatamente 
 
 Repetir um cadastro idêntico com o cookie válido retorna 200 e a mesma participação. Dados diferentes na mesma sessão retornam 409 com orientação para retomar a participação existente. Sem cookie não há deduplicação automática por contato. Uma sessão ausente, expirada ou revogada recebe 401; resultado ainda não submetido recebe 409. O encerramento é idempotente e retorna 204 mesmo sem sessão válida. A resposta de resultado inclui escolhas, pontuações e indicadores, sem contatos, pesos ou percentuais.
 
-Para confirmar, envie um booleano JSON e, em caso de concordância, o UUID de um dos cursos marcados com `is_recommended: true` no resultado:
+Para confirmar, envie apenas `{"agrees_with_result": true}`. O aluno não precisa escolher um curso: o encaminhamento indica o estande do curso sugerido pelo quiz, no ginásio. Em caso de empate, inclui os estandes de todos os cursos sugeridos.
 
-```json
-{
-  "agrees_with_result": true,
-  "chosen_course_id": "00000000-0000-0000-0000-000000000003"
-}
-```
+Para discordar, envie `{"agrees_with_result": false}`. O encaminhamento indica o estande de Psicologia, também no ginásio. Valores como `"false"` e `1` não são aceitos como booleanos. Por compatibilidade com clientes anteriores, `chosen_course_id` continua opcional ao concordar e deve identificar um curso sugerido; ao discordar, deve estar ausente ou ser `null`. Destinos enviados no corpo são rejeitados.
 
-Para discordar, envie `{"agrees_with_result": false}`; o curso deve estar ausente ou ser `null`. Valores como `"false"` e `1` não são aceitos como booleanos. Concordância sem curso, discordância com curso, curso não sugerido e tentativa de informar um destino no corpo retornam 422. Todos os cursos sugeridos em áreas empatadas são elegíveis.
-
-No “sim”, o encaminhamento usa o destino e as instruções específicos do curso, quando cadastrados; caso contrário, usa o par da área. No “não”, usa o destino e as instruções de Psicologia/SPA definidos no quiz único. Os textos são copiados exatamente do catálogo, sem inferir laboratórios ou localizações.
+Os novos encaminhamentos usam os estandes no ginásio, independentemente dos antigos espaços de vivência do catálogo. Confirmações anteriores mantêm os textos e os horários gravados.
 
 O POST de feedback retorna 200 com `participation_id`, `status: "completed"`, `completed_at`, `agrees_with_result`, `chosen_course_id`, `destination`, `destination_instructions` e `answered_at`. Feedback e conclusão são gravados na mesma transação, sem mudar escolhas ou pontuações. Repetir a mesma resposta e curso devolve a confirmação anterior, com os mesmos textos e horários. Uma resposta ou curso diferente após conclusão retorna 409; antes da submissão também retorna 409.
 
@@ -310,7 +303,7 @@ O POST de feedback retorna 200 com `participation_id`, `status: "completed"`, `c
 
 As respostas `/api/` usam `Cache-Control: no-store`; erros de validação omitem os valores enviados e falhas de banco retornam mensagem genérica. Há limites por IP em janelas de 60 segundos: `PARTICIPANT_REGISTRATION_LIMIT` (60) para cadastro e `PARTICIPANT_SUBMISSION_LIMIT` (120) para cada uma das operações de submissão e feedback, em janelas separadas. Cada operação também permite 30 tentativas por credencial por minuto. O excesso retorna 429 com `Retry-After`. O controle usa memória limitada por processo; implantações com múltiplos workers precisam de limite compartilhado no proxy. Configure proxies confiáveis no servidor antes de usar IPs encaminhados.
 
-Os testes PostgreSQL exercitam as rotas com banco real, rollback, isolamento de sessões, expiração, revogação, imutabilidade do catálogo, destinos de curso/área/SPA, submissões e confirmações concorrentes. Execute-os com `./scripts/check-db.sh` ou com `TEST_DATABASE_URL` apontando para um banco descartável cujo nome termine em `_test`.
+Os testes PostgreSQL exercitam as rotas com banco real, rollback, isolamento de sessões, expiração, revogação, imutabilidade do catálogo, encaminhamentos para os estandes no ginásio, submissões e confirmações concorrentes. Execute-os com `./scripts/check-db.sh` ou com `TEST_DATABASE_URL` apontando para um banco descartável cujo nome termine em `_test`.
 
 Antes da publicação, validar o conteúdo e a metodologia do quiz.
 

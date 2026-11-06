@@ -225,8 +225,7 @@ class ParticipationFeedback(Base):
         CheckConstraint("btrim(destination) <> ''", name="destination_nonempty"),
         CheckConstraint("btrim(destination_instructions) <> ''", name="instructions_nonempty"),
         CheckConstraint(
-            "(agrees_with_result AND chosen_course_id IS NOT NULL) OR "
-            "(NOT agrees_with_result AND chosen_course_id IS NULL)",
+            "agrees_with_result OR chosen_course_id IS NULL",
             name="agreement_matches_course",
         ),
     )

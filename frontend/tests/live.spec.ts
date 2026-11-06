@@ -28,19 +28,22 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.getByRole('button', { name: 'Revisar escolhas' }).click()
   await page.getByRole('button', { name: 'Confirmar 25 escolhas' }).click()
   await expect(page.getByRole('heading', { name: 'Saúde', exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Espaços de vivência' })).toBeVisible()
-  await expect(page.getByText('CEMA, SPA, Anatômico e complexo esportivo')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Espaços de vivência' })).toHaveCount(0)
   await expect(page.getByText('Ver pontuação por área')).toHaveCount(0)
   await expect(page.getByText('Enfermagem e Fisioterapia', { exact: true })).toBeVisible()
   await expect(page.getByText('Enfermagem', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Fisioterapia', { exact: true })).toHaveCount(0)
   await page.screenshot({ path: testInfo.outputPath('resultado-desktop.png'), fullPage: true })
-  await page.getByRole('radio', { name: 'Sim, faz sentido' }).check()
-  await page
-    .getByLabel('Qual curso você quer conhecer?')
-    .selectOption({ label: 'Enfermagem e Fisioterapia · Saúde' })
+  await page.getByRole('radio', { name: 'Concordo com o resultado' }).check()
+  await expect(page.getByRole('combobox')).toHaveCount(0)
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
   await expect(page.getByRole('heading', { name: 'Vamos conhecer de perto?' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Estande de Enfermagem e Fisioterapia — Ginásio' }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(/Vá ao ginásio e visite o estande de Enfermagem e Fisioterapia/),
+  ).toBeVisible()
   await page.screenshot({
     path: testInfo.outputPath('encaminhamento-desktop.png'),
     fullPage: true,
@@ -82,7 +85,7 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await expect(
     page.getByRole('table', { name: 'Pontuação por curso' }).getByText('Sugerido'),
   ).toHaveCount(1)
-  await expect(page.getByText('Curso escolhido: Enfermagem e Fisioterapia')).toBeVisible()
+  await expect(page.getByText('Estande de Enfermagem e Fisioterapia — Ginásio')).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('admin-detalhe.png'), fullPage: true })
   await expect(page.getByRole('link', { name: 'Versões e destinos' })).toHaveCount(0)
   expect((await page.request.get('/api/admin/versions')).status()).toBe(404)
@@ -95,7 +98,7 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   await page.getByRole('button', { name: 'Exportar resultados filtrados (CSV)' }).click()
   await (await download).saveAs(testInfo.outputPath('participacoes.csv'))
   await page.getByRole('link', { name: 'Ver resultado de Aluno fictício para teste' }).click()
-  await expect(page.getByText('Curso escolhido: Enfermagem e Fisioterapia')).toBeVisible()
+  await expect(page.getByText('Estande de Enfermagem e Fisioterapia — Ginásio')).toBeVisible()
   await page.getByRole('button', { name: 'Sair', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Entrar na administração' })).toBeVisible()
   expect((await page.request.get('/api/admin/me')).status()).toBe(401)

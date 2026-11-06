@@ -17,8 +17,11 @@ from app.scoring import SCORING_METHOD
 
 EVENT_NAME = "ISE Day"
 DEFAULT_WORKBOOK = Path(__file__).resolve().parents[1] / "catalog" / "quiz-final.xlsx"
-PSYCHOLOGY_DESTINATION = "SPA"
-PSYCHOLOGY_INSTRUCTIONS = "Procure a equipe de Psicologia no SPA."
+PSYCHOLOGY_DESTINATION = "Estande de Psicologia — Ginásio"
+PSYCHOLOGY_INSTRUCTIONS = (
+    "Vá ao ginásio e visite o estande de Psicologia para conversar com a equipe "
+    "sobre seus interesses e explorar outras possibilidades."
+)
 PENDING_INSTRUCTIONS = (
     "Referência da planilha por área; confirmar localização e encaminhamento com a instituição."
 )

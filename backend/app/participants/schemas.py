@@ -51,8 +51,6 @@ class Feedback(BaseModel):
 
     @model_validator(mode="after")
     def course_matches_agreement(self):
-        if self.agrees_with_result and self.chosen_course_id is None:
-            raise ValueError("Escolha um dos cursos sugeridos ao concordar com o resultado.")
         if not self.agrees_with_result and self.chosen_course_id is not None:
             raise ValueError("Não escolha um curso ao discordar do resultado.")
         return self
