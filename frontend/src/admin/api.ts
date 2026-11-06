@@ -64,10 +64,14 @@ export const adminApi = {
       undefined,
       signal,
     ),
-  exportCsv: async (params: URLSearchParams, signal: AbortSignal) => {
+  exportReport: async (
+    format: 'csv' | 'xlsx',
+    params: URLSearchParams,
+    signal: AbortSignal,
+  ) => {
     let response: Response
     try {
-      response = await fetch(`/api/admin/export.csv?${params}`, {
+      response = await fetch(`/api/admin/export.${format}?${params}`, {
         credentials: 'same-origin',
         cache: 'no-store',
         signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),

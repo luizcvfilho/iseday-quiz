@@ -229,23 +229,29 @@ test('painel e detalhe cabem no celular e busca vazia tem mensagem', async ({ pa
   ).toBeVisible()
 })
 
-test('exportação usa os filtros aplicados e baixa CSV', async ({ page }) => {
-  await mockAdmin(page, true)
-  let exported: URLSearchParams | undefined
-  await page.route('**/api/admin/export.csv?*', async (route) => {
-    exported = new URL(route.request().url()).searchParams
-    await route.fulfill({
-      contentType: 'text/csv; charset=utf-8',
-      body: '\ufeffNome;Escola\r\nAna de Teste;Escola de teste\r\n',
+for (const format of ['csv', 'xlsx'] as const) {
+  test(`exportação usa os filtros aplicados e baixa ${format.toUpperCase()}`, async ({ page }) => {
+    await mockAdmin(page, true)
+    let exported: URLSearchParams | undefined
+    await page.route(`**/api/admin/export.${format}?*`, async (route) => {
+      exported = new URL(route.request().url()).searchParams
+      await route.fulfill({
+        contentType: format === 'csv'
+          ? 'text/csv; charset=utf-8'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        body: 'arquivo de teste',
+      })
     })
+    await page.goto('/admin?q=Ana&page=2&page_size=20')
+    const button = page.getByRole('button', {
+      name: `Exportar resultados filtrados (${format.toUpperCase()})`,
+    })
+    await expect(button).toBeEnabled()
+    const download = page.waitForEvent('download')
+    await button.click()
+    expect((await download).suggestedFilename()).toBe(`participacoes-iseday.${format}`)
+    expect(exported?.get('q')).toBe('Ana')
+    expect(exported?.has('page')).toBe(false)
+    expect(exported?.has('page_size')).toBe(false)
   })
-  await page.goto('/admin?q=Ana&page=2&page_size=20')
-  const button = page.getByRole('button', { name: 'Exportar resultados filtrados (CSV)' })
-  await expect(button).toBeEnabled()
-  const download = page.waitForEvent('download')
-  await button.click()
-  expect((await download).suggestedFilename()).toBe('participacoes-iseday.csv')
-  expect(exported?.get('q')).toBe('Ana')
-  expect(exported?.has('page')).toBe(false)
-  expect(exported?.has('page_size')).toBe(false)
-})
+}

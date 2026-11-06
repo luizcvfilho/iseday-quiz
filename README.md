@@ -375,12 +375,13 @@ O painel administrativo é dedicado às participações e à exportação. Não 
 
 ### Exportação de resultados
 
-No painel de participações, **Exportar resultados filtrados (CSV)** baixa todas as participações correspondentes aos filtros aplicados, independentemente da página atual. O CSV abre em Excel e outros editores de planilha, usa UTF-8 com BOM, separador `;` e datas no horário de Brasília. Inclui identificação da participação, nome, escola, situação, início, todas as áreas vencedoras, cursos sugeridos e confirmação, sem contatos. Empates permanecem na mesma linha.
+No painel de participações, os botões **Exportar resultados filtrados (CSV)** e **Exportar resultados filtrados (XLSX)** baixam todas as participações correspondentes aos filtros aplicados, independentemente da página atual. Ambos incluem somente nome, escola, telefone, e-mail, encaminhamento final e orientações do encaminhamento. O destino e as orientações são os mesmos salvos na confirmação do aluno, incluindo todos os cursos indicados quando houver empate. Para participações ainda sem confirmação, as duas colunas de encaminhamento ficam vazias. O CSV usa UTF-8 com BOM e separador `;`; o XLSX preserva os telefones como texto e permite abrir diretamente no Excel.
 
 A exportação exige autenticação, gera auditoria e neutraliza células que poderiam ser interpretadas como fórmulas. O limite é de 10.000 participações por arquivo; refine os filtros para conjuntos maiores.
 
 | Método e rota | Comportamento |
 |---|---|
 | `GET /api/admin/export.csv` | Exporta o conjunto filtrado; aceita os mesmos filtros da consulta administrativa. |
+| `GET /api/admin/export.xlsx` | Exporta os mesmos dados e filtros em uma planilha Excel. |
 
-Os testes verificam a migração para o catálogo único, remoção transacional dos dados de teste, preservação de administradores, imutabilidade do catálogo e dos resultados, concorrência, filtros, exportação e ausência das antigas rotas de versões. O teste com API e PostgreSQL reais percorre cadastro, resultado agrupado, confirmação, consulta administrativa e exportação CSV em um esquema descartável.
+Os testes verificam a migração para o catálogo único, remoção transacional dos dados de teste, preservação de administradores, imutabilidade do catálogo e dos resultados, concorrência, filtros, exportação e ausência das antigas rotas de versões. O teste com API e PostgreSQL reais percorre cadastro, resultado agrupado, confirmação, consulta administrativa e exportação CSV e XLSX em um esquema descartável.

@@ -172,3 +172,14 @@ def export_csv(access: Access, filters: ReportFilters):
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="participacoes-iseday.csv"'},
     )
+
+
+@router.get("/export.xlsx")
+def export_xlsx(access: Access, filters: ReportFilters):
+    content = management.export_xlsx(access.session, filters)
+    security.audit(access.session, access.user, "participations.export")
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="participacoes-iseday.xlsx"'},
+    )

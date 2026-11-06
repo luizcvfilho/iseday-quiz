@@ -94,9 +94,15 @@ test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reai
   expect(current.statements).toHaveLength(74)
   await page.getByRole('link', { name: 'Participações', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Estudantes encontrados (1)' })).toBeVisible()
-  const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Exportar resultados filtrados (CSV)' }).click()
-  await (await download).saveAs(testInfo.outputPath('participacoes.csv'))
+  for (const format of ['csv', 'xlsx']) {
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', {
+      name: `Exportar resultados filtrados (${format.toUpperCase()})`,
+    }).click()
+    const file = await download
+    expect(file.suggestedFilename()).toBe(`participacoes-iseday.${format}`)
+    await file.saveAs(testInfo.outputPath(`participacoes.${format}`))
+  }
   await page.getByRole('link', { name: 'Ver resultado de Aluno fictício para teste' }).click()
   await expect(page.getByText('Estande de Enfermagem e Fisioterapia — Ginásio')).toBeVisible()
   await page.getByRole('button', { name: 'Sair', exact: true }).click()

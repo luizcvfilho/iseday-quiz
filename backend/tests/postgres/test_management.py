@@ -1,7 +1,8 @@
 import csv
-from io import StringIO
+from io import BytesIO, StringIO
 
 import pytest
+from openpyxl import load_workbook
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -9,26 +10,64 @@ from app.models import AdminAuditLog
 
 from .test_admin import admin as admin
 from .test_admin import login
-from .test_participants import WRITE, register, submit
+from .test_participants import WRITE, confirm, register, submit
 from .test_participants import api as api
 
 pytestmark = pytest.mark.postgres
 
 
-def test_csv_uses_filters_preserves_ties_and_escapes_formulas(api, admin):
+HEADERS = [
+    "Nome",
+    "Escola",
+    "Telefone",
+    "E-mail",
+    "Encaminhamento final",
+    "Orientações do encaminhamento",
+]
+
+
+def read_export(response, format):
+    if format == "csv":
+        assert response.content.startswith(b"\xef\xbb\xbf")
+        return list(csv.reader(StringIO(response.content.decode("utf-8-sig")), delimiter=";"))
+    assert response.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    workbook = load_workbook(BytesIO(response.content))
+    sheet = workbook.active
+    assert sheet.freeze_panes == "A2"
+    assert all(cell.data_type != "f" for row in sheet for cell in row)
+    rows = [[cell or "" for cell in row] for row in sheet.values]
+    workbook.close()
+    return rows
+
+
+@pytest.mark.parametrize("format", ["csv", "xlsx"])
+@pytest.mark.parametrize("status", ["draft", "submitted"])
+def test_export_includes_only_registration_and_pending_referral(api, admin, format, status):
     login(api)
     register(api, full_name='=HYPERLINK("example")')
-    submit(api)
-    response = api.client.get("/api/admin/export.csv?status=submitted")
+    if status == "submitted":
+        submit(api)
+    response = api.client.get(f"/api/admin/export.{format}?status={status}")
     assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
-    assert "attachment" in response.headers["content-disposition"]
-    assert response.content.startswith(b"\xef\xbb\xbf")
-    rows = list(csv.reader(StringIO(response.content.decode("utf-8-sig")), delimiter=";"))
-    assert len(rows) == 2 and rows[1][1].startswith("'=")
-    assert "Area 0 | Area 1" == rows[1][5]
-    assert "student@example.org" not in response.text and "+5511999999999" not in response.text
-    empty = api.client.get("/api/admin/export.csv?status=completed")
-    assert len(list(csv.reader(StringIO(empty.content.decode("utf-8-sig")), delimiter=";"))) == 1
+    assert response.headers["content-disposition"] == (
+        f'attachment; filename="participacoes-iseday.{format}"'
+    )
+    prefix = "'" if format == "csv" else ""
+    assert read_export(response, format) == [
+        HEADERS,
+        [
+            prefix + '=HYPERLINK("example")',
+            "Test school",
+            prefix + "+5511999999999",
+            "student@example.org",
+            "",
+            "",
+        ],
+    ]
+    empty = api.client.get(f"/api/admin/export.{format}?status=completed")
+    assert read_export(empty, format) == [HEADERS]
     with Session(api.engine) as session:
         assert (
             session.scalar(
@@ -40,8 +79,38 @@ def test_csv_uses_filters_preserves_ties_and_escapes_formulas(api, admin):
         )
 
 
+@pytest.mark.parametrize("format", ["csv", "xlsx"])
+@pytest.mark.parametrize("referral", ["all_courses", "chosen_course", "psychology"])
+def test_export_contains_the_saved_final_referral(api, admin, format, referral):
+    login(api)
+    register(api, school_name="Colégio São João")
+    submit(api)
+    result = confirm(
+        api,
+        agrees=referral != "psychology",
+        course=api.quiz.courses[0] if referral == "chosen_course" else None,
+    )
+    assert result.status_code == 200
+    saved = result.json()
+    response = api.client.get(f"/api/admin/export.{format}?status=completed")
+    rows = read_export(response, format)
+    assert rows[0] == HEADERS
+    assert len(rows) == 2
+    assert rows[1] == [
+        "Test Student",
+        "Colégio São João",
+        ("'" if format == "csv" else "") + "+5511999999999",
+        "student@example.org",
+        saved["destination"],
+        saved["destination_instructions"],
+    ]
+    if referral == "all_courses":
+        assert "Course 0" in rows[1][5] and "Course 2" in rows[1][5]
+
+
 def test_export_requires_authentication_and_version_management_is_removed(api, admin):
     assert api.client.get("/api/admin/export.csv").status_code == 401
+    assert api.client.get("/api/admin/export.xlsx").status_code == 401
     assert login(api).status_code == 200
     for path in (
         "versions",
