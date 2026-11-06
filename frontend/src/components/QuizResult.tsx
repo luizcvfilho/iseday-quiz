@@ -33,7 +33,7 @@ export function QuizResult({
   uncertain: boolean
   onConfirm: (data: Feedback) => void
 }) {
-  const [agrees, setAgrees] = useState<boolean | null>(null)
+  const [agrees, setAgrees] = useState<boolean | null>(result.feedback?.agrees_with_result ?? null)
   const winners = result.areas.filter((a) => a.is_winner)
   const recommended = result.courses.filter((c) => c.is_recommended)
   return (

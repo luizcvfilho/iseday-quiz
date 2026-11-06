@@ -195,17 +195,32 @@ def test_completion_requires_feedback(db, submitted):
 
 
 @pytest.mark.parametrize("agrees", [True, False])
-def test_feedback_completion_immutability_and_controlled_retention(db, quiz, submitted, agrees):
+def test_feedback_revision_preserves_identity_completion_and_controlled_retention(
+    db, quiz, submitted, agrees
+):
     feedback(db, submitted, course=quiz.courses[0] if agrees else None, agrees=agrees)
     db.execute(
         update(Participation).values(
             status="completed", completed_at=func.clock_timestamp(), access_token_hash=None
         )
     )
-    rejects(
-        db, update(ParticipationFeedback).values(destination="Changed"), "Feedback is immutable"
+    db.execute(
+        update(ParticipationFeedback).values(agrees_with_result=False, chosen_course_id=None)
     )
-    rejects(db, delete(ParticipationFeedback), "Feedback is immutable")
+    assert db.scalar(select(ParticipationFeedback.agrees_with_result)) is False
+    rejects(
+        db,
+        update(ParticipationFeedback).values(participation_id=uuid4()),
+        "participation cannot change",
+    )
+    rejects(
+        db,
+        update(ParticipationFeedback).values(
+            agrees_with_result=True, chosen_course_id=quiz.courses[1]
+        ),
+        "recommended courses",
+    )
+    rejects(db, delete(ParticipationFeedback), "controlled retention")
     rejects(
         db,
         update(Participation).values(completed_at=func.clock_timestamp()),

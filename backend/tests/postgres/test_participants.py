@@ -388,9 +388,6 @@ def test_feedback_accepts_any_recommended_course_and_preserves_scores(api, cours
     assert confirm(api, course=course).json() == body
     # Retrying the original submission after completion still returns the saved history.
     assert submit(api).json() == after
-    assert confirm(api, agrees=False).status_code == 409
-    other_course = api.quiz.courses[2 if course_index == 0 else 0]
-    assert confirm(api, course=other_course).status_code == 409
     assert feedback_count(api) == 1 and counts(api) == [25, 2, 3]
     with Session(api.engine) as session:
         persisted = session.get(ParticipationFeedback, UUID(body["participation_id"]))
@@ -433,7 +430,6 @@ def test_agreement_without_course_refers_to_all_saved_recommendations(api):
     assert after["feedback"] == body
     assert after["courses"] == before["courses"] and after["areas"] == before["areas"]
     assert feedback_count(api) == 1
-    assert confirm(api, agrees=False).status_code == 409
 
 
 def test_agreement_without_course_refers_to_the_single_recommendation(api):
@@ -473,7 +469,73 @@ def test_negative_feedback_uses_fixed_psychology_destination(api):
     assert confirm(api, agrees=False).json() == body
     api.settings.privacy_notice_text = None
     assert api.client.get("/api/participations/me/result").json()["feedback"] == body
-    assert confirm(api, agrees=True, course=api.quiz.courses[0]).status_code == 409
+    assert feedback_count(api) == 1
+
+
+def test_feedback_can_be_revised_in_both_directions_without_changing_quiz_or_completion(api):
+    register(api)
+    before = submit(api).json()
+    first = confirm(api).json()
+    for agrees, course in [(False, None), (True, api.quiz.courses[2]), (True, None)]:
+        response = confirm(api, agrees=agrees, course=course)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["agrees_with_result"] is agrees
+        assert body["chosen_course_id"] == (str(course) if course else None)
+        assert body["completed_at"] == first["completed_at"]
+        assert body["answered_at"] > first["answered_at"]
+        assert ("Psicologia" in body["destination"]) is (not agrees)
+        assert confirm(api, agrees=agrees, course=course).json() == body
+        after = api.client.get("/api/participations/me/result").json()
+        assert after["feedback"] == body and after["status"] == "completed"
+        for field in ("areas", "courses", "statement_ids", "submitted_at"):
+            assert after[field] == before[field]
+    assert feedback_count(api) == 1 and counts(api) == [25, 2, 3]
+
+
+def test_feedback_revision_failure_preserves_previous_referral(api):
+    register(api)
+    submit(api)
+    first = confirm(api).json()
+    assert confirm(api, course=api.quiz.courses[1]).status_code == 422
+
+    def fail(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("UPDATE participation_feedback SET"):
+            conn.exec_driver_sql("SELECT 1 / 0 /* private-feedback-revision-failure */")
+
+    event.listen(api.engine, "before_cursor_execute", fail)
+    try:
+        response = confirm(api, agrees=False)
+    finally:
+        event.remove(api.engine, "before_cursor_execute", fail)
+    assert response.status_code == 503 and "private-feedback-revision-failure" not in response.text
+    assert api.client.get("/api/participations/me/result").json()["feedback"] == first
+    assert confirm(api, agrees=False).status_code == 200
+    assert feedback_count(api) == 1
+
+
+def test_feedback_revision_migration_unlocks_existing_completed_results(api):
+    with api.engine.begin() as db:
+        command.downgrade(migration_config(db), "0004")
+    register(api)
+    before = submit(api).json()
+    first = confirm(api).json()
+    # Reproduce a running API whose code reloaded before its database was migrated.
+    assert confirm(api, agrees=False).status_code == 503
+    assert api.client.get("/api/participations/me/result").json()["feedback"] == first
+
+    with api.engine.begin() as db:
+        command.upgrade(migration_config(db), "head")
+    response = confirm(api, agrees=False)
+    assert response.status_code == 200, response.text
+    revised = response.json()
+    assert revised["agrees_with_result"] is False
+    assert revised["destination"] == "Estande de Psicologia — Ginásio"
+    assert revised["completed_at"] == first["completed_at"]
+    saved = api.client.get("/api/participations/me/result").json()
+    assert saved["feedback"] == revised
+    for field in ("areas", "courses", "statement_ids", "submitted_at"):
+        assert saved[field] == before[field]
     assert feedback_count(api) == 1
 
 
@@ -606,12 +668,12 @@ def test_concurrent_feedback_persists_one_confirmation(api, different):
         a = workers.submit(send, True, api.quiz.courses[0])
         b = workers.submit(send, agrees, course if agrees else None)
         responses = [a.result(timeout=15), b.result(timeout=15)]
-    assert sorted(status for status, _ in responses) == (
-        [200, 200] if different == "identical" else [200, 409]
-    )
+    assert [status for status, _ in responses] == [200, 200]
     saved = api.client.get("/api/participations/me/result").json()
     assert saved["status"] == "completed"
-    assert all(body == saved["feedback"] for status, body in responses if status == 200)
+    assert saved["feedback"] in [body for _, body in responses]
+    if different == "identical":
+        assert responses[0][1] == responses[1][1]
     assert feedback_count(api) == 1 and counts(api) == [25, 2, 3]
 
 

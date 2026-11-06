@@ -269,17 +269,16 @@ def saved_feedback(session: Session, participant: Participation) -> FeedbackResu
 
 
 def record_feedback(session: Session, participant: Participation, data: Feedback) -> FeedbackResult:
-    """Record a destination snapshot and complete under the participant's existing lock."""
+    """Save the latest answer and destination under the participant's existing lock."""
     if participant.status == "draft":
         raise HTTPException(409, "Submeta as escolhas antes de confirmar o resultado.")
     if participant.status == "completed":
         previous = saved_feedback(session, participant)
         if (
-            previous.agrees_with_result != data.agrees_with_result
-            or previous.chosen_course_id != data.chosen_course_id
+            previous.agrees_with_result == data.agrees_with_result
+            and previous.chosen_course_id == data.chosen_course_id
         ):
-            raise HTTPException(409, "O resultado já foi confirmado com outra resposta.")
-        return previous
+            return previous
 
     if data.agrees_with_result:
         query = (
@@ -312,20 +311,27 @@ def record_feedback(session: Session, participant: Participation, data: Feedback
         destination, instructions = PSYCHOLOGY_DESTINATION, PSYCHOLOGY_INSTRUCTIONS
 
     now = session.scalar(select(func.clock_timestamp()))
-    session.add(
-        ParticipationFeedback(
-            participation_id=participant.id,
-            agrees_with_result=data.agrees_with_result,
-            chosen_course_id=data.chosen_course_id,
-            destination=destination,
-            destination_instructions=instructions,
-            answered_at=now,
+    if participant.status == "completed":
+        feedback = session.get(ParticipationFeedback, participant.id)
+        feedback.agrees_with_result = data.agrees_with_result
+        feedback.chosen_course_id = data.chosen_course_id
+        feedback.destination = destination
+        feedback.destination_instructions = instructions
+        feedback.answered_at = now
+    else:
+        session.add(
+            ParticipationFeedback(
+                participation_id=participant.id,
+                agrees_with_result=data.agrees_with_result,
+                chosen_course_id=data.chosen_course_id,
+                destination=destination,
+                destination_instructions=instructions,
+                answered_at=now,
+            )
         )
-    )
-    # Feedback insertion requires 'submitted'; completion requires that feedback
-    # already exists. Flush explicitly in this order, within the same transaction.
-    session.flush()
-    participant.status = "completed"
-    participant.completed_at = now
+        # Insert before completing; later revisions preserve the initial completion time.
+        session.flush()
+        participant.status = "completed"
+        participant.completed_at = now
     session.flush()
     return saved_feedback(session, participant)

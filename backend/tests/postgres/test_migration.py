@@ -141,7 +141,7 @@ def test_upgrade_resets_test_data_preserves_admins_and_matches_metadata(empty_da
         assert set(inspect(connection).get_table_names()) == set(Base.metadata.tables) | {
             "alembic_version"
         }
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0004"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0005"
         assert (
             compare_metadata(
                 MigrationContext.configure(connection, opts={"compare_server_default": True}),

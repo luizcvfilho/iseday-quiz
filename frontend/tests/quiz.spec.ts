@@ -28,6 +28,7 @@ async function mockApi(page: Page) {
     ends: 0,
     loseSubmit: false,
     loseFeedback: false,
+    rejectFeedback: false,
     failRead: false,
     failCurrent: false,
   }
@@ -103,6 +104,10 @@ async function mockApi(page: Page) {
     }
     if (path === '/api/participations/me/feedback') {
       state.feedbacks++
+      if (state.rejectFeedback) {
+        state.rejectFeedback = false
+        return reply(503, { detail: 'Não foi possível salvar. Tente novamente.' })
+      }
       const body = request.postDataJSON()
       expect(body).toEqual({ agrees_with_result: expect.any(Boolean) })
       state.session!.status = 'completed'
@@ -219,6 +224,37 @@ test('perda da resposta de submissão e feedback recupera histórico', async ({ 
   ).toBeVisible()
   expect(state.submissions).toBe(1)
   expect(state.feedbacks).toBe(1)
+})
+
+test('encaminhamento permite voltar, mudar a resposta nos dois sentidos e retomar a alteração', async ({ page }) => {
+  const state = await mockApi(page)
+  await register(page)
+  await selectAndSubmit(page)
+  await page.getByRole('radio', { name: 'Concordo com o resultado' }).check()
+  await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
+  await page.getByRole('button', { name: 'Voltar e mudar resposta' }).click()
+  await expect(page.getByRole('radio', { name: 'Concordo com o resultado' })).toBeChecked()
+  await page.getByRole('radio', { name: 'Não concordo' }).check()
+  state.loseFeedback = true
+  await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
+  await expect(page.getByRole('heading', { name: 'Estande de Psicologia — Ginásio', exact: true })).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar minha participação' }).click()
+  await expect(page.getByRole('heading', { name: 'Estande de Psicologia — Ginásio', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Voltar e mudar resposta' }).click()
+  await expect(page.getByRole('radio', { name: 'Não concordo' })).toBeChecked()
+  await page.getByRole('radio', { name: 'Concordo com o resultado' }).check()
+  state.rejectFeedback = true
+  await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
+  await expect(page.getByRole('alert')).toContainText('Não foi possível salvar')
+  await expect(page.getByRole('radio', { name: 'Concordo com o resultado' })).toBeChecked()
+  await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
+  await expect(page.getByRole('heading', { name: 'Estandes dos cursos indicados — Ginásio' })).toBeVisible()
+  await page.getByRole('button', { name: 'Voltar e mudar resposta' }).click()
+  await expect(page.getByRole('radio', { name: 'Concordo com o resultado' })).toBeChecked()
+  expect(state.submissions).toBe(1)
+  expect(state.registrations).toBe(1)
+  expect(state.feedbacks).toBe(4)
 })
 
 test('falha dupla mantém escolhas e repete o mesmo conjunto', async ({ page }) => {
