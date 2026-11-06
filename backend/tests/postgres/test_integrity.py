@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -10,7 +12,6 @@ from app.models import (
     ParticipationCourseResult,
     ParticipationFeedback,
     ParticipationSelection,
-    QuizVersion,
     Statement,
     StatementCourseWeight,
 )
@@ -60,7 +61,6 @@ def test_duplicate_selection_rejected(db, quiz, draft):
         db,
         insert(ParticipationSelection).values(
             participation_id=draft,
-            quiz_version_id=quiz.version,
             statement_id=quiz.statements[0],
         ),
         "duplicate key",
@@ -76,37 +76,13 @@ def test_duplicate_selection_rejected(db, quiz, draft):
         (ParticipationCourseResult, "course_id"),
     ],
 )
-def test_participation_children_cannot_mix_versions(db, quiz, draft, model, key):
-    other = catalog(db, number=2, publish=False)
-    foreign_id = {
-        "statement_id": other.statements[0],
-        "area_id": other.areas[0],
-        "course_id": other.courses[0],
-    }[key]
-    values = dict(participation_id=draft, quiz_version_id=quiz.version, **{key: foreign_id})
+def test_participation_children_require_known_catalog_items(db, quiz, draft, model, key):
+    values = dict(participation_id=draft, **{key: uuid4()})
     if model is ParticipationAreaResult:
         values.update(score=1, is_winner=True)
     elif model is ParticipationCourseResult:
         values.update(score=1, is_recommended=True)
     rejects(db, insert(model).values(**values), "foreign key", IntegrityError)
-
-
-@pytest.mark.parametrize("target", ["course_area", "weight_course", "weight_statement"])
-def test_catalog_links_cannot_mix_versions(db, quiz, target):
-    other = catalog(db, number=2, publish=False)
-    if target == "course_area":
-        stmt = insert(Course).values(
-            quiz_version_id=other.version, area_id=quiz.areas[0], name="Bad"
-        )
-    else:
-        stmt = insert(StatementCourseWeight).values(
-            quiz_version_id=other.version,
-            statement_id=quiz.statements[0]
-            if target == "weight_statement"
-            else other.statements[0],
-            course_id=quiz.courses[0] if target == "weight_course" else other.courses[1],
-        )
-    rejects(db, stmt, "foreign key", IntegrityError)
 
 
 @pytest.mark.parametrize("model", [ParticipationAreaResult, ParticipationCourseResult])
@@ -167,7 +143,7 @@ def test_submitted_answers_and_results_are_immutable(db, quiz, submitted, model,
     if operation == "insert":
         stmt = insert(table).from_select(list(table.c.keys()), select(table))
     elif operation == "update":
-        stmt = update(table).values(quiz_version_id=quiz.version)
+        stmt = update(table).values(**{list(table.c.keys())[0]: table.c[list(table.c.keys())[0]]})
     else:
         stmt = delete(table)
     rejects(db, stmt, "Submitted answers and results are immutable")
@@ -175,73 +151,15 @@ def test_submitted_answers_and_results_are_immutable(db, quiz, submitted, model,
 
 @pytest.mark.parametrize("model", [Area, Course, Statement, StatementCourseWeight])
 @pytest.mark.parametrize("operation", ["insert", "update", "delete"])
-def test_published_catalog_is_immutable(db, quiz, model, operation):
+def test_fixed_catalog_is_immutable(db, quiz, model, operation):
     table = model.__table__
     if operation == "insert":
         stmt = insert(table).from_select(list(table.c.keys()), select(table))
     elif operation == "update":
-        stmt = update(table).values(quiz_version_id=quiz.version)
+        stmt = update(table).values(**{list(table.c.keys())[0]: table.c[list(table.c.keys())[0]]})
     else:
         stmt = delete(table)
-    rejects(db, stmt, "immutable")
-
-
-@pytest.mark.parametrize(
-    "defect,message",
-    [
-        ("count", "at least 25"),
-        ("unmapped_statement", "Every statement"),
-        ("unmapped_course", "Every course"),
-        ("empty_area", "Every area"),
-    ],
-)
-def test_publication_validates_catalog(db, defect, message):
-    quiz = catalog(db, publish=False, count=24 if defect == "count" else 26)
-    if defect == "unmapped_statement":
-        db.execute(
-            delete(StatementCourseWeight).where(
-                StatementCourseWeight.statement_id == quiz.statements[-1]
-            )
-        )
-    elif defect == "unmapped_course":
-        db.execute(
-            delete(StatementCourseWeight).where(StatementCourseWeight.course_id == quiz.courses[1])
-        )
-    elif defect == "empty_area":
-        db.execute(
-            insert(Area).values(
-                quiz_version_id=quiz.version,
-                name="Empty area",
-                destination="Space",
-                destination_instructions="Directions",
-            )
-        )
-    rejects(db, update(QuizVersion).values(status="published"), message)
-
-
-def test_only_one_published_version_and_archival_keeps_history(db, quiz, draft):
-    other = catalog(db, number=2, publish=False)
-    rejects(
-        db,
-        update(QuizVersion).where(QuizVersion.id == other.version).values(status="published"),
-        "duplicate key",
-        IntegrityError,
-    )
-    db.execute(update(QuizVersion).where(QuizVersion.id == quiz.version).values(status="archived"))
-    db.execute(
-        update(QuizVersion).where(QuizVersion.id == other.version).values(status="published")
-    )
-    selections(db, quiz, draft)
-    results(db, quiz, draft)
-    submit(db, draft)  # A session already in progress may finish its archived version.
-    with pytest.raises(DBAPIError, match="published version"), db.begin_nested():
-        participation(db, quiz)
-    rejects(
-        db,
-        update(QuizVersion).where(QuizVersion.id == quiz.version).values(status="draft"),
-        "immutable",
-    )
-    rejects(db, delete(QuizVersion).where(QuizVersion.id == quiz.version), "cannot be deleted")
+    rejects(db, stmt, "fixed and cannot be changed")
 
 
 def test_feedback_requires_submitted_participation(db, draft):
@@ -296,7 +214,7 @@ def test_feedback_completion_immutability_and_controlled_retention(db, quiz, sub
         ParticipationFeedback,
     ):
         assert db.scalar(select(func.count()).select_from(model)) == 0
-    assert db.scalar(select(func.count()).select_from(QuizVersion)) == 1
+    assert db.scalar(select(func.count()).select_from(Statement)) == 26
 
 
 @pytest.mark.parametrize(
@@ -322,15 +240,9 @@ def test_no_backward_or_skipped_state_transition(db, draft):
     )
     rejects(
         db,
-        update(Participation).values(quiz_version_id=func.gen_random_uuid()),
-        "identity/version cannot change",
+        update(Participation).values(id=func.gen_random_uuid()),
+        "identity cannot change",
     )
-
-
-def test_cannot_start_participation_on_draft_catalog(db):
-    quiz = catalog(db, publish=False)
-    with pytest.raises(DBAPIError, match="published version"), db.begin_nested():
-        participation(db, quiz)
 
 
 def test_admin_email_uniqueness_is_case_insensitive(db):
@@ -349,3 +261,8 @@ def test_admin_email_uniqueness_is_case_insensitive(db):
         "duplicate key",
         IntegrityError,
     )
+
+
+@pytest.mark.parametrize("table", ["areas", "courses", "statements", "statement_course_weights"])
+def test_fixed_catalog_cannot_be_truncated(db, table):
+    rejects(db, text(f"TRUNCATE {table} CASCADE"), "fixed and cannot be changed")

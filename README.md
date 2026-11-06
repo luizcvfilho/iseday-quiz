@@ -136,7 +136,7 @@ Para validar a migração e as regras de integridade em PostgreSQL 17 real:
 ./scripts/check-db.sh
 ```
 
-O script cria um container temporário, com porta local aleatória e dados em memória, e o remove ao terminar. Não usa o banco nem o volume do Compose. Verifica criação, reversão e reaplicação da migração, correspondência com os modelos, restrições, histórico e concorrência.
+O script cria um container temporário, com porta local aleatória e dados em memória, e o remove ao terminar. Não usa o banco nem o volume do Compose. Verifica instalação do catálogo fixo, remoção dos dados de teste antigos, rollback em falhas da migração, correspondência com os modelos, restrições e concorrência.
 
 Também é possível usar um servidor de teste existente:
 
@@ -148,7 +148,11 @@ O nome do banco deve terminar em `_test`. Os testes criam e removem apenas esque
 
 ## Banco e migrações
 
-Os 13 modelos do domínio estão em `backend/app/models.py`. A revisão `0001` cria tabelas, índices, constraints e triggers. As regras SQL dessa revisão ficam em `backend/migrations/versions/0001_integrity.sql`, carregadas pela migração; ambos os arquivos devem ser distribuídos juntos. A revisão `0002` copia o nome da escola para `participations.school_name` em todas as participações existentes e remove o vínculo e a tabela `schools`. O downgrade recria escolas pelos nomes salvos, sem recuperar os antigos IDs, cidade, UF ou disponibilidade. No desenvolvimento local, `make dev` aplica as migrações automaticamente; com a API no Docker Compose, use `make migrate`. Não use `create_all` nem execute `docs/database-schema.sql`: esse arquivo é a proposta original, não uma migração.
+Os 12 modelos do domínio estão em `backend/app/models.py`. As revisões `0001` e `0002` são o histórico do esquema anterior. A revisão `0003` remove `quiz_versions` e todos os vínculos de versão, instala o catálogo único com 74 afirmativas e 9 cursos e bloqueia alterações no catálogo. Distribua juntos `0003_single_quiz.py`, `0003_single_quiz.sql` e `backend/catalog/quiz-final.json`.
+
+**Atualização de instalações existentes:** a migração `0003` apaga as versões e as participações de teste anteriores, incluindo escolhas, resultados e confirmações. Contas, sessões administrativas e auditoria são preservadas. A remoção é definitiva; o downgrade dessa revisão é bloqueado. Para voltar ao esquema anterior, restaure um backup anterior à migração. Pare a API antiga antes de migrar e reinicie com o código atualizado.
+
+No desenvolvimento local, `make dev` aplica as migrações automaticamente; com a API no Docker Compose, use `make migrate`. Não use `create_all` nem execute `docs/database-schema.sql`: esse arquivo é a proposta histórica, não uma migração.
 
 Para preparar um banco vazio ou atualizar o banco local:
 
@@ -160,11 +164,11 @@ uv run --frozen alembic current
 
 No Compose: `docker compose exec api uv run --no-sync alembic upgrade head`.
 
-A migração exige PostgreSQL e não importa conteúdo nem cria contas administrativas. Ela preserva versões publicadas, exige 25 escolhas únicas da mesma versão e resultados de todas as áreas/cursos na submissão, e bloqueia edições posteriores das respostas e resultados. O cadastro fica imutável após envio, com exceção dos campos necessários à sessão e à conclusão. O feedback só aceita um curso sugerido, quando há concordância. A exclusão da participação inteira remove seus dados dependentes; os registros de auditoria podem sobreviver à exclusão.
+A migração exige PostgreSQL, carrega o catálogo fixo automaticamente e não cria contas administrativas. Não há importação, publicação, arquivamento ou edição de perguntas/pesos pelo painel. O catálogo é compartilhado por todas as participações; seus identificadores são estáveis. Triggers bloqueiam inserção, atualização, exclusão e `TRUNCATE` das tabelas de catálogo.
 
-O motor de cálculo está em `backend/app/scoring.py`, integrado à submissão atômica em `backend/app/participants/`. A confirmação e o encaminhamento também são gravados de forma atômica. As triggers usam bloqueios da versão/participação para serializar alterações concorrentes. O catálogo pode ser arquivado sem impedir que participações já iniciadas submetam suas escolhas e confirmem seus resultados.
+A submissão exige 25 escolhas únicas e resultados de todas as áreas/cursos. Respostas, resultados e cadastro submetidos são imutáveis, com exceção dos campos de sessão e conclusão. O feedback só aceita um curso sugerido quando há concordância. A exclusão da participação inteira remove seus dados dependentes; a auditoria pode sobreviver à exclusão. Bloqueios da participação serializam submissões e confirmações concorrentes.
 
-Para futuras alterações, edite os modelos e gere uma nova revisão com `uv run --frozen alembic revision --autogenerate -m "descricao"`. Revise o código gerado: funções/triggers e algumas mudanças de constraints exigem migrações manuais. Não edite revisões já aplicadas. A reversão para `base` remove todas as tabelas do domínio e seus dados; use-a somente em banco descartável ou em procedimento de manutenção planejado.
+Alterações futuras no esquema devem usar uma nova revisão Alembic; não edite revisões já aplicadas. O conteúdo do quiz é fixo e não tem editor administrativo.
 
 `docker compose down` encerra os serviços e preserva os dados. O volume `postgres_data` guarda o PostgreSQL. As variáveis `POSTGRES_*` inicializam apenas um volume vazio: alterar o `.env` não troca as credenciais de um banco já criado.
 
@@ -179,7 +183,7 @@ scripts/              Setup, desenvolvimento e verificações
 compose.yaml          PostgreSQL, API e frontend em desenvolvimento
 ```
 
-As dependências de backend incluem validação de e-mail, Argon2 para a autenticação administrativa e openpyxl para a importação do catálogo. O fluxo do aluno oferece telas e API de cadastro, sessão, submissão, resultado, confirmação e encaminhamento. A área administrativa oferece login, filtros, resumo e consulta individual dos resultados.
+As dependências de backend incluem validação de e-mail, Argon2 para a autenticação administrativa e openpyxl para a validação da planilha do catálogo. O fluxo do aluno oferece telas e API de cadastro, sessão, submissão, resultado, confirmação e encaminhamento. A área administrativa oferece login, filtros, resumo e consulta individual dos resultados.
 
 ## Telas do aluno
 
@@ -189,9 +193,9 @@ Todas as telas usam Material UI, incluindo cadastro, escolhas, revisão, resulta
 
 A referência visual é a [página inicial do ISECENSA](https://www.isecensa.edu.br/), consultada em 29/10/2026: azul `#006aa3`, azul-marinho `#0b172b`, rodapé `#001a33`, fundos brancos e detalhes dourados. Inter no texto e Open Sans nos títulos são servidas localmente por Fontsource; suas licenças acompanham o build em `frontend/public/licenses/`. O brasão em `frontend/public/brand/brasao-isecensa.png` foi obtido do [arquivo publicado no site institucional](https://www.isecensa.edu.br/sites/default/files/BRAS%C3%83O%20COLOR.png). O tema adapta essas referências ao quiz; ajustes futuros de marca devem ser feitos nesse tema central.
 
-A escola é um campo de texto obrigatório: o participante digita o nome livremente, com até 200 caracteres. O nome é salvo na própria participação, sem espaços nas extremidades, e continua disponível no histórico, nos filtros, nos resumos e no CSV. Não é necessário cadastrar escolas antecipadamente. O telefone aceita formatação brasileira com DDD e é enviado no formato `+55…`. O aviso configurado pela instituição aparece antes do cadastro. Se catálogo publicado ou aviso ainda não estiverem preparados, a interface informa a indisponibilidade e permite tentar novamente; não cria nem publica conteúdo automaticamente.
+A escola é um campo de texto obrigatório: o participante digita o nome livremente, com até 200 caracteres. O nome é salvo na própria participação, sem espaços nas extremidades, e continua disponível no histórico, nos filtros, nos resumos e no CSV. Não é necessário cadastrar escolas antecipadamente. O telefone aceita formatação brasileira com DDD e é enviado no formato `+55…`. O aviso configurado pela instituição aparece antes do cadastro. Se o catálogo fixo ou o aviso ainda não estiverem preparados, a interface informa a indisponibilidade e permite tentar novamente.
 
-Contatos e marcações ficam apenas na memória da página, sem `localStorage` ou `sessionStorage`. Os contatos saem da tela após iniciar o quiz. Marcações ainda não enviadas se perdem ao recarregar; há aviso ao tentar sair com escolhas e informação explícita na retomada do rascunho. Uma sessão existente permite retomar a própria participação e consultar o resultado e o encaminhamento. A retomada usa a versão original da participação, inclusive se arquivada.
+Contatos e marcações ficam apenas na memória da página, sem `localStorage` ou `sessionStorage`. Os contatos saem da tela após iniciar o quiz. Marcações ainda não enviadas se perdem ao recarregar; há aviso ao tentar sair com escolhas e informação explícita na retomada do rascunho. Uma sessão existente permite retomar a própria participação e consultar o resultado e o encaminhamento. A retomada usa o mesmo catálogo fixo de todas as participações.
 
 Se a resposta de um envio se perder, a interface consulta o resultado salvo. Se também não conseguir confirmar essa consulta, mantém as escolhas e bloqueia sua edição até recuperar a resposta ou repetir o mesmo envio. Confirmações usam a mesma regra.
 
@@ -215,11 +219,11 @@ Para testar também o fluxo com API real, catálogo original e PostgreSQL, confi
 TEST_DATABASE_URL=postgresql+psycopg://usuario:senha@localhost:5432/iseday_test npm run test:live
 ```
 
-Esse comando também exige `uv` no PATH. O servidor de teste cria um esquema aleatório próprio, aplica a migração, importa/publica o catálogo **somente nesse esquema de teste** e usa os nomes de escola digitados durante o teste. O esquema é removido ao encerrar. Não usa o banco da aplicação nem altera o catálogo publicado nela. As portas 5179 (Vite) e 8009 (API de teste) precisam estar livres. Capturas e traces de teste ficam em `frontend/test-results/`, fora do Git.
+Esse comando também exige `uv` no PATH. O servidor de teste cria um esquema aleatório próprio, aplica a migração, instala o catálogo fixo **somente nesse esquema de teste** e usa os nomes de escola digitados durante o teste. O esquema é removido ao encerrar. Não usa o banco da aplicação nem altera o catálogo dela. As portas 5179 (Vite) e 8009 (API de teste) precisam estar livres. Capturas e traces de teste ficam em `frontend/test-results/`, fora do Git.
 
 ## Catálogo do quiz
 
-A planilha do catálogo está em `backend/catalog/quiz-final.xlsx`. O catálogo normalizado, o SHA-256 da fonte e as pendências de revisão estão em `backend/catalog/quiz-final.json`: **74 afirmativas, 9 cursos, 5 áreas e 78 vínculos**, com peso proposto de 1 por vínculo. Engenharia Civil e Mecânica formam uma única opção, assim como Enfermagem e Fisioterapia. Cada grupo recebe apenas um vínculo por afirmativa, sem duplicar a pontuação. As abas `Tabela_Area` e `Tabela_Cursos` usam os mesmos 9 cursos já agrupados; o importador valida os nomes diretamente, sem separar e reagrupar os pares. Os textos originais são preservados, inclusive possíveis erros de digitação.
+A planilha do catálogo está em `backend/catalog/quiz-final.xlsx`. O catálogo normalizado, o SHA-256 da fonte e as pendências de revisão estão em `backend/catalog/quiz-final.json`: **74 afirmativas, 9 cursos, 5 áreas e 78 vínculos**, com peso proposto de 1 por vínculo. Engenharia Civil e Mecânica formam uma única opção, assim como Enfermagem e Fisioterapia. Cada grupo recebe apenas um vínculo por afirmativa, sem duplicar a pontuação. As abas `Tabela_Area` e `Tabela_Cursos` usam os mesmos 9 cursos já agrupados; o validador confere os nomes diretamente, sem separar e reagrupar os pares. Os textos originais são preservados, inclusive possíveis erros de digitação.
 
 Valide sem precisar de banco (comandos a partir da raiz):
 
@@ -230,36 +234,17 @@ uv run --frozen python -m app.catalog validate
 uv run --frozen python -m app.catalog validate --report catalog/quiz-final.json
 ```
 
-Depois de aplicar as migrações, importe no banco configurado em `DATABASE_URL` (ainda em `backend/`):
+O catálogo é instalado automaticamente por `alembic upgrade head`. Não há comando de importação nem etapa de publicação. Alterar a planilha não modifica o banco instalado; a aplicação utiliza o catálogo fixo carregado pela migração.
 
-```bash
-uv run --frozen alembic upgrade head
-uv run --frozen python -m app.catalog import --version 1
-```
-
-No Compose, após reconstruir a imagem da API com as novas dependências:
-
-```bash
-docker compose up -d --build api
-docker compose exec api uv run --no-sync alembic upgrade head
-docker compose exec api uv run --no-sync python -m app.catalog import --version 1
-```
-
-O comando grava **somente um rascunho**, em uma única transação. Repetir a mesma importação para a mesma versão retorna o registro existente; conteúdo diferente é rejeitado sem sobrescrever dados. Use outro número de versão para uma revisão. Importações concorrentes são serializadas. Versões publicadas ou arquivadas nunca são alteradas ou republicadas pelo importador.
-
-**Instalações existentes:** em **Versões e destinos**, copie a versão em uso para gerar um rascunho com os cursos agrupados, revise os destinos e publique a nova versão. O agrupamento vale para os novos cadastros após a publicação; participações iniciadas e resultados anteriores mantêm o catálogo histórico. Não é necessária uma migração de banco.
-
-O importador exige o modelo das duas abas da planilha e rejeita fórmulas, números ou frases duplicados, cursos desconhecidos, vínculos repetidos e conteúdo incompleto. `--file /caminho/planilha.xlsx` permite validar uma revisão com a mesma estrutura; `--event "Nome do evento"` define o evento na importação.
-
-Antes de publicar, a instituição precisa validar os textos, a metodologia, os pesos e os destinos. As listas de espaços são referências por área, sem destinos específicos inventados para os cursos. Consulte as pendências em `backend/catalog/quiz-final.json`. O importador não publica versões.
+O validador exige o modelo das duas abas e rejeita fórmulas, números ou frases duplicados, cursos desconhecidos, vínculos repetidos e conteúdo incompleto. `--file /caminho/planilha.xlsx` permite conferir uma planilha com a mesma estrutura. As listas de espaços são referências por área; as pendências institucionais continuam descritas no relatório JSON.
 
 ## Cálculo de afinidade
 
-`calculate_scores`, em `backend/app/scoring.py`, recebe um `ScoringCatalog` com o retrato de uma versão e exatamente 25 UUIDs de afirmativas únicas dessa versão. O chamador deve montar esse retrato com todas as áreas, cursos, afirmativas e pesos da versão vinculada à participação. O motor não acessa o banco nem publica conteúdo.
+`calculate_scores`, em `backend/app/scoring.py`, recebe um `ScoringCatalog` com todas as áreas, cursos, afirmativas e pesos do quiz único e exatamente 25 UUIDs de afirmativas únicas. O motor não acessa o banco.
 
 O método `area_distinct_count_course_sum_v1` soma um ponto por área distinta em cada afirmativa e soma os pesos positivos dos vínculos para cada curso. Todas as áreas com a maior pontuação vencem; dentro de cada área vencedora, todos os cursos com a maior pontuação positiva são recomendados. Os pontos não são normalizados nem apresentados como percentuais.
 
-O resultado contém o identificador da versão e pontuações/indicadores de todas as áreas e cursos, inclusive os com zero. A ordem dos identificadores é estável e não desempata resultados. Escolhas inválidas geram `InvalidSelectionError`; catálogo inconsistente ou método desconhecido gera `ScoringConfigurationError`, sem produzir resultado parcial.
+O resultado contém pontuações/indicadores de todas as áreas e cursos, inclusive os com zero. A ordem dos identificadores é estável e não desempata resultados. Escolhas inválidas geram `InvalidSelectionError`; catálogo inconsistente ou método desconhecido gera `ScoringConfigurationError`, sem produzir resultado parcial.
 
 Para executar somente os testes do cálculo, a partir da raiz:
 
@@ -267,20 +252,20 @@ Para executar somente os testes do cálculo, a partir da raiz:
 uv run --project backend --frozen pytest backend/tests/test_scoring.py
 ```
 
-Os testes cobrem limites, duplicatas, identificadores externos à versão, vínculos inválidos, pesos, empates, ausência de normalização e o catálogo original de 74 afirmativas. O motor implementa a regra proposta; sua aprovação institucional continua pendente.
+Os testes cobrem limites, duplicatas, identificadores desconhecidos, vínculos inválidos, pesos, empates, ausência de normalização e o catálogo original de 74 afirmativas. O motor implementa a regra proposta; sua aprovação institucional continua pendente.
 
 ## API do participante
 
-As rotas ficam sob a mesma origem do frontend, usando o proxy `/api`. O cadastro exige uma versão publicada e o aviso de uso dos dados configurado. A escola é informada em texto livre e salva em `school_name`. O importador continua criando somente rascunhos: esta etapa não publica o catálogo automaticamente.
+As rotas ficam sob a mesma origem do frontend, usando o proxy `/api`. O cadastro exige as migrações aplicadas e o aviso de uso dos dados configurado. A escola é informada em texto livre e salva em `school_name`. Todas as participações usam o mesmo catálogo fixo.
 
 Configure `PRIVACY_NOTICE_VERSION` e `PRIVACY_NOTICE_TEXT` no `.env`. O exemplo fornecido é somente para desenvolvimento com dados fictícios; substitua-o pelo aviso institucional aprovado antes do uso real. Sem ambos, a consulta do quiz e novos cadastros retornam 503. A versão apresentada precisa ser enviada no cadastro; ela registra qual aviso foi exibido, sem representar consentimento por si só.
 
 | Método e rota | Comportamento |
 |---|---|
-| `GET /api/quiz/current` | Versão publicada, aviso e afirmativas ordenadas, sem vínculos ou pesos. |
+| `GET /api/quiz/current` | Quiz único, aviso e afirmativas ordenadas, sem vínculos ou pesos. |
 | `POST /api/participations` | Cadastro validado, participação em rascunho e cookie temporário. |
-| `GET /api/participations/me` | Identificador, versão, estado e expiração da própria sessão, sem contatos. |
-| `GET /api/participations/me/quiz` | Afirmativas da versão vinculada à sessão, inclusive após arquivamento, sem vínculos ou pesos. |
+| `GET /api/participations/me` | Identificador, estado e expiração da própria sessão, sem contatos. |
+| `GET /api/participations/me/quiz` | Afirmativas do quiz único para a sessão autenticada, sem vínculos ou pesos. |
 | `POST /api/participations/me/submit` | Valida 25 escolhas, calcula e grava escolhas/resultados na mesma transação. |
 | `GET /api/participations/me/result` | Resultado persistido da própria participação, com todas as áreas/cursos, empates e eventual confirmação. |
 | `POST /api/participations/me/feedback` | Registra concordância, curso escolhido e destino exibido; conclui a participação na mesma transação. |
@@ -288,11 +273,10 @@ Configure `PRIVACY_NOTICE_VERSION` e `PRIVACY_NOTICE_TEXT` no `.env`. O exemplo 
 
 Todos os POSTs exigem o cabeçalho `X-Quiz-Request: 1`. A API recusa requisições com `Sec-Fetch-Site: cross-site` e não habilita CORS. Esse cabeçalho personalizado é a proteção de CSRF para a API de mesma origem; qualquer futura abertura de CORS precisa preservar essa proteção. Referência: [OWASP — cabeçalhos personalizados para APIs](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi).
 
-Exemplo do corpo do cadastro (substitua o UUID pelo valor de `/api/quiz/current`):
+Exemplo do corpo do cadastro:
 
 ```json
 {
-  "quiz_version_id": "00000000-0000-0000-0000-000000000001",
   "school_name": "Escola do participante",
   "full_name": "Aluno de teste",
   "phone": "+5511999999999",
@@ -303,7 +287,7 @@ Exemplo do corpo do cadastro (substitua o UUID pelo valor de `/api/quiz/current`
 
 O cadastro retorna 201 com metadados da participação. O cookie é `HttpOnly`, `SameSite=Strict`, sem `Domain`, válido por 60 minutos por padrão (`PARTICIPANT_SESSION_MINUTES`, de 1 a 240). Em produção (`APP_ENV=production`), usa `Secure` e o nome `__Host-iseday_participant`; em desenvolvimento, `iseday_participant`. O token aleatório só aparece no cookie; o banco guarda seu SHA-256. Envie o cookie nas chamadas seguintes e nunca use o UUID como credencial.
 
-O envio recebe `{"statement_ids": ["uuid-1", "uuid-2", "..."]}`, com exatamente 25 UUIDs únicos da versão da participação. A API bloqueia a participação até o fim da transação. O mesmo conjunto de escolhas, em qualquer ordem, retorna o resultado salvo sem recalcular; outro conjunto após submissão retorna 409. Uma versão arquivada continua válida para quem já havia iniciado. Qualquer falha durante a gravação desfaz escolhas, pontuações e mudança de estado.
+O envio recebe `{"statement_ids": ["uuid-1", "uuid-2", "..."]}`, com exatamente 25 UUIDs únicos do catálogo fixo. A API bloqueia a participação até o fim da transação. O mesmo conjunto de escolhas, em qualquer ordem, retorna o resultado salvo sem recalcular; outro conjunto após submissão retorna 409. Qualquer falha durante a gravação desfaz escolhas, pontuações e mudança de estado.
 
 Repetir um cadastro idêntico com o cookie válido retorna 200 e a mesma participação. Dados diferentes na mesma sessão retornam 409 com orientação para retomar a participação existente. Sem cookie não há deduplicação automática por contato. Uma sessão ausente, expirada ou revogada recebe 401; resultado ainda não submetido recebe 409. O encerramento é idempotente e retorna 204 mesmo sem sessão válida. A resposta de resultado inclui escolhas, pontuações e indicadores, sem contatos, pesos ou percentuais.
 
@@ -318,7 +302,7 @@ Para confirmar, envie um booleano JSON e, em caso de concordância, o UUID de um
 
 Para discordar, envie `{"agrees_with_result": false}`; o curso deve estar ausente ou ser `null`. Valores como `"false"` e `1` não são aceitos como booleanos. Concordância sem curso, discordância com curso, curso não sugerido e tentativa de informar um destino no corpo retornam 422. Todos os cursos sugeridos em áreas empatadas são elegíveis.
 
-No “sim”, o encaminhamento usa o destino e as instruções específicos do curso, quando cadastrados; caso contrário, usa o par da área. No “não”, usa o destino e as instruções de Psicologia/SPA da versão respondida, mesmo que outra versão já esteja publicada. Os textos são copiados exatamente do catálogo, sem inferir laboratórios ou localizações.
+No “sim”, o encaminhamento usa o destino e as instruções específicos do curso, quando cadastrados; caso contrário, usa o par da área. No “não”, usa o destino e as instruções de Psicologia/SPA definidos no quiz único. Os textos são copiados exatamente do catálogo, sem inferir laboratórios ou localizações.
 
 O POST de feedback retorna 200 com `participation_id`, `status: "completed"`, `completed_at`, `agrees_with_result`, `chosen_course_id`, `destination`, `destination_instructions` e `answered_at`. Feedback e conclusão são gravados na mesma transação, sem mudar escolhas ou pontuações. Repetir a mesma resposta e curso devolve a confirmação anterior, com os mesmos textos e horários. Uma resposta ou curso diferente após conclusão retorna 409; antes da submissão também retorna 409.
 
@@ -326,7 +310,7 @@ O POST de feedback retorna 200 com `participation_id`, `status: "completed"`, `c
 
 As respostas `/api/` usam `Cache-Control: no-store`; erros de validação omitem os valores enviados e falhas de banco retornam mensagem genérica. Há limites por IP em janelas de 60 segundos: `PARTICIPANT_REGISTRATION_LIMIT` (60) para cadastro e `PARTICIPANT_SUBMISSION_LIMIT` (120) para cada uma das operações de submissão e feedback, em janelas separadas. Cada operação também permite 30 tentativas por credencial por minuto. O excesso retorna 429 com `Retry-After`. O controle usa memória limitada por processo; implantações com múltiplos workers precisam de limite compartilhado no proxy. Configure proxies confiáveis no servidor antes de usar IPs encaminhados.
 
-Os testes PostgreSQL exercitam as rotas com banco real, rollback, isolamento de sessões, expiração, revogação, arquivo de versões, destinos de curso/área/SPA, submissões e confirmações concorrentes. Execute-os com `./scripts/check-db.sh` ou com `TEST_DATABASE_URL` apontando para um banco descartável cujo nome termine em `_test`.
+Os testes PostgreSQL exercitam as rotas com banco real, rollback, isolamento de sessões, expiração, revogação, imutabilidade do catálogo, destinos de curso/área/SPA, submissões e confirmações concorrentes. Execute-os com `./scripts/check-db.sh` ou com `TEST_DATABASE_URL` apontando para um banco descartável cujo nome termine em `_test`.
 
 Antes da publicação, validar o conteúdo e a metodologia do quiz.
 
@@ -372,9 +356,9 @@ Todas as rotas de consulta validam a conta ativa, expiração e revogação no s
 O painel apresenta:
 
 - Participações paginadas, da mais recente para a mais antiga, com nome, escola, início, situação, todas as áreas vencedoras, cursos sugeridos e confirmação.
-- Busca por nome e filtros por escola, versão do quiz, situação, área vencedora, curso sugerido, concordância e período de início. As datas incluem os dias inicial e final no horário de Brasília. Os filtros ficam na URL e são preservados ao voltar do detalhe.
+- Busca por nome e filtros por escola, situação, área vencedora, curso sugerido, concordância e período de início. As datas incluem os dias inicial e final no horário de Brasília. Os filtros ficam na URL e são preservados ao voltar do detalhe.
 - Totais de iniciadas, em andamento, aguardando confirmação e concluídas, além de distribuição por escola, área e curso. A concordância considera apenas quem respondeu; ausência de confirmação não significa discordância. Empates contam a participação em cada categoria, sem duplicar os totais gerais.
-- Detalhe com cadastro, datas, aviso apresentado, as 25 afirmativas selecionadas, pontuações completas, todos os empates, curso escolhido e encaminhamento efetivamente exibido. Rascunhos informam que ainda não há resultado. Versões arquivadas continuam disponíveis para consulta histórica.
+- Detalhe com cadastro, datas, aviso apresentado, as 25 afirmativas selecionadas, pontuações completas, todos os empates, curso escolhido e encaminhamento efetivamente exibido. Rascunhos informam que ainda não há resultado.
 
 As consultas usam os resultados persistidos, sem recalcular ou editar respostas. Login, logout, criação/redefinição de conta, listagem, resumo e abertura de detalhe geram auditoria com ator, ação, horário e eventual identificador da participação, sem copiar contatos ou senhas.
 
@@ -383,40 +367,27 @@ As consultas usam os resultados persistidos, sem recalcular ou editar respostas.
 | `POST /api/admin/login` | Recebe `email` e `password`; cria a sessão e retorna identidade e validade. |
 | `GET /api/admin/me` | Identidade e expiração da sessão administrativa. |
 | `POST /api/admin/logout` | Revoga a sessão atual e remove o cookie; repetição é segura. |
-| `GET /api/admin/options` | Nomes de escola salvos nas participações, versões, áreas e cursos disponíveis para filtrar o histórico. |
+| `GET /api/admin/options` | Nomes de escola salvos nas participações, áreas e cursos disponíveis para filtrar o histórico. |
 | `GET /api/admin/participations` | Lista sem contatos, com `page` (padrão 1) e `page_size` (padrão 20, máximo 100). |
 | `GET /api/admin/participations/{id}` | Cadastro, seleções, resultado e confirmação de uma participação. |
 | `GET /api/admin/summary` | Contagens e distribuições do conjunto filtrado, independentemente da página. |
 
-Listagem e resumo aceitam `q`, `school_name`, `quiz_version_id`, `status` (`draft`, `submitted`, `completed`), `area_id`, `course_id`, `agreement` (`yes`, `no`, `pending`), `date_from` e `date_to` (`AAAA-MM-DD`). O filtro de escola compara o nome salvo exatamente; as opções vêm dos nomes distintos já informados pelos participantes. Área e curso filtram apenas indicadores de vitória/sugestão. As consultas mantêm um retrato consistente do banco durante submissões concorrentes.
+Listagem e resumo aceitam `q`, `school_name`, `status` (`draft`, `submitted`, `completed`), `area_id`, `course_id`, `agreement` (`yes`, `no`, `pending`), `date_from` e `date_to` (`AAAA-MM-DD`). O filtro de escola compara o nome salvo exatamente; as opções vêm dos nomes distintos já informados pelos participantes. Área e curso filtram apenas indicadores de vitória/sugestão. As consultas mantêm um retrato consistente do banco durante submissões concorrentes.
 
 Os testes PostgreSQL cobrem credenciais incorretas, conta inativa, cookies, expiração, revogação, troca de senha, isolamento do participante, limites, filtros, paginação, empates, rascunhos, histórico e auditoria. `npm --prefix frontend test` inclui os cenários administrativos de navegador, recuperação de erros e layout móvel. `npm --prefix frontend run test:live`, com `TEST_DATABASE_URL`, valida também cadastro → resultado → confirmação → login administrativo → consulta individual → logout contra a API e o banco reais, criando uma conta fictícia exclusivamente no esquema temporário do teste.
 
-### Gestão de versões e destinos
+### Quiz único
 
-Depois de entrar, use a navegação **Participações** e **Versões e destinos**:
-
-- Em **Versões e destinos** (`/admin/versions`), crie um rascunho a partir do catálogo original de 74 afirmativas ou copie qualquer versão existente. A cópia recebe outro número e novos identificadores, preservando textos e destinos da origem. Ao copiar versões antigas, Engenharia Civil e Mecânica e Enfermagem e Fisioterapia são consolidados nos respectivos grupos. Vínculos com a mesma afirmativa viram um único vínculo com o maior peso existente, sem somar os pesos do par. Áreas e destinos dos cursos agrupados precisam coincidir; se houver divergência, ajuste os destinos em um rascunho antes de copiá-lo ou crie um rascunho a partir do catálogo original.
-- Abra uma versão para configurar nome do evento, acolhimento em Psicologia/SPA, destinos e instruções de cada área e, opcionalmente, de cada curso. Destino e instruções do curso precisam ser informados juntos; ambos vazios usam o encaminhamento da área. Somente rascunhos podem ser editados.
-- Em **Perguntas e pesos**, busque e edite afirmativas existentes ou use **Adicionar afirmativa**. O editor permite vincular cursos, adicionar/remover vínculos e ajustar os respectivos pesos. **Aplicar ao rascunho** mantém a alteração no formulário; **Salvar rascunho** grava perguntas, pesos e destinos juntos. Novas afirmativas entram no final e recebem numeração automaticamente ao salvar. A versão aceita até 1.000 afirmativas; cada uma precisa de texto único (até 4.000 caracteres) e pelo menos um curso, sem vínculos repetidos, com pesos inteiros de 1 a 32.767. Os cursos precisam pertencer à versão. O aluno continua selecionando exatamente 25 afirmativas; os pesos alteram a soma por curso e a área continua contando um ponto distinto por afirmativa. A publicação exige que todos os cursos e áreas estejam cobertos. Versões publicadas ou arquivadas permitem somente consulta; crie uma cópia para revisar o conteúdo. A importação por planilha continua disponível como alternativa. A conferência no painel não substitui a validação institucional.
-- **Publicar versão** exige salvar as alterações e confirmar a revisão institucional. A publicação valida o catálogo e arquiva a versão anterior na mesma transação. Novos cadastros usam a nova versão; participações já iniciadas e resultados antigos mantêm sua versão original. **Arquivar versão** interrompe novos cadastros até outra publicação.
-
-Alterações concorrentes no rascunho são detectadas por uma revisão do conteúdo. A publicação também verifica se a versão anteriormente publicada continua sendo a mesma apresentada ao administrador. Conflitos retornam 409 e pedem recarregamento/revisão. As operações de escrita exigem sessão administrativa e a proteção de mesma origem já usada pela API; criação/edição, publicação e arquivamento geram auditoria. Não há nova migração nesta etapa.
+O painel administrativo é dedicado às participações e à exportação. Não há cadastro de versões, editor de afirmativas/pesos/destinos nem operações de publicação e arquivamento. As antigas rotas `/api/admin/versions` e suas subrotas foram removidas.
 
 ### Exportação de resultados
 
-No painel de participações, **Exportar resultados filtrados (CSV)** baixa todas as participações correspondentes aos filtros aplicados, independentemente da página atual. O CSV abre em Excel e outros editores de planilha, usa UTF-8 com BOM, separador `;` e datas no horário de Brasília. Inclui identificação da participação, nome, escola, versão, situação, início, todas as áreas vencedoras, cursos sugeridos e confirmação, sem contatos. Empates permanecem na mesma linha.
+No painel de participações, **Exportar resultados filtrados (CSV)** baixa todas as participações correspondentes aos filtros aplicados, independentemente da página atual. O CSV abre em Excel e outros editores de planilha, usa UTF-8 com BOM, separador `;` e datas no horário de Brasília. Inclui identificação da participação, nome, escola, situação, início, todas as áreas vencedoras, cursos sugeridos e confirmação, sem contatos. Empates permanecem na mesma linha.
 
 A exportação exige autenticação, gera auditoria e neutraliza células que poderiam ser interpretadas como fórmulas. O limite é de 10.000 participações por arquivo; refine os filtros para conjuntos maiores.
 
 | Método e rota | Comportamento |
 |---|---|
-| `GET /api/admin/versions` | Lista versões e quantidade de afirmativas. |
-| `GET /api/admin/versions/{id}` | Conteúdo, destinos e revisão da versão. |
-| `POST /api/admin/versions` | Cria um rascunho original ou uma cópia. |
-| `POST /api/admin/versions/{id}` | Atualiza destinos, afirmativas e pesos do rascunho com `expected_revision`. Envie todas as afirmativas existentes (com `id`) e as novas (sem `id` ou com `id: null`), cada uma com `text` e `courses: [{course_id, weight}]`. |
-| `POST /api/admin/versions/{id}/publish` | Publica com revisão institucional confirmada, `expected_revision` e `expected_published_id` (ou `null` se não houver publicação). |
-| `POST /api/admin/versions/{id}/archive` | Arquiva a versão publicada, preservando participações. |
 | `GET /api/admin/export.csv` | Exporta o conjunto filtrado; aceita os mesmos filtros da consulta administrativa. |
 
-Os testes adicionais verificam autenticação e CSRF das operações, persistência de escolas em texto livre, migração do histórico, importação e cópia de versões, edição atômica de destinos/perguntas/pesos, rejeição de textos e vínculos duplicados ou externos à versão, pontuação com os novos pesos, detecção de rascunho desatualizado, publicação concorrente, preservação do histórico e exportação com filtros/empates/proteção contra fórmulas. Os cenários de navegador cobrem as novas telas, falhas recuperáveis e navegação móvel. O teste com API e banco reais também verifica a escola digitada no detalhe administrativo, copia/configura/publica uma versão com pergunta nova e pesos editados e baixa um CSV, sempre no esquema descartável de teste.
+Os testes verificam a migração para o catálogo único, remoção transacional dos dados de teste, preservação de administradores, imutabilidade do catálogo e dos resultados, concorrência, filtros, exportação e ausência das antigas rotas de versões. O teste com API e PostgreSQL reais percorre cadastro, resultado agrupado, confirmação, consulta administrativa e exportação CSV em um esquema descartável.

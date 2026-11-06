@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.admin.__main__ import save_account
 from app.admin.security import cookie_name, passwords
-from app.models import AdminAuditLog, AdminSession, AdminUser, Participation, QuizVersion
+from app.models import AdminAuditLog, AdminSession, AdminUser, Participation
 from app.participants.security import token_hash
 
 from .test_participants import WRITE, confirm, register, submit
@@ -209,7 +209,6 @@ def test_filters_apply_equally_to_list_and_summary(api, admin):
         ({"agreement": "pending"}, ids[2:]),
         ({"school_name": "Test school"}, ids),
         ({"school_name": "Unknown school"}, []),
-        ({"quiz_version_id": str(api.quiz.version)}, ids),
         ({"area_id": str(api.quiz.areas[0])}, ids[:3]),
         ({"course_id": str(api.quiz.courses[2])}, ids[:3]),
         ({"course_id": str(api.quiz.courses[1])}, []),
@@ -235,14 +234,12 @@ def test_filters_apply_equally_to_list_and_summary(api, admin):
         assert api.client.get(f"/api/admin/participations?{query}").status_code == 422
 
 
-def test_archived_historical_result_and_options(api, admin):
+def test_results_and_options_have_no_versions(api, admin):
     ids = make_participations(api)
-    with api.engine.begin() as db:
-        db.execute(update(QuizVersion).values(status="archived"))
     login(api)
     options = api.client.get("/api/admin/options").json()
     assert options["schools"] == ["Test school"]
-    assert options["versions"][0]["id"] == str(api.quiz.version)
+    assert "versions" not in options
     assert len(options["areas"]) == 2 and len(options["courses"]) == 3
     assert api.client.get(f"/api/admin/participations/{ids[0]}").json()["result"] is not None
 

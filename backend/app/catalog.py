@@ -1,7 +1,4 @@
-"""Validate the ISE Day workbook and import an immutable snapshot as a draft.
-
-Run ``python -m app.catalog --help`` from backend/. No publication is performed.
-"""
+"""Validate the fixed ISE Day workbook. The database catalog is installed by Alembic."""
 
 import argparse
 import hashlib
@@ -11,21 +8,14 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from io import BytesIO
 from pathlib import Path
-from uuid import UUID, uuid4, uuid5
 from zipfile import BadZipFile
 
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
-from pydantic import ValidationError
-from sqlalchemy import insert, select, text
-from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import get_settings
-from app.db import build_engine
-from app.models import Area, Course, QuizVersion, Statement, StatementCourseWeight
 from app.scoring import SCORING_METHOD
 
+EVENT_NAME = "ISE Day"
 DEFAULT_WORKBOOK = Path(__file__).resolve().parents[1] / "catalog" / "quiz-final.xlsx"
 PSYCHOLOGY_DESTINATION = "SPA"
 PSYCHOLOGY_INSTRUCTIONS = "Procure a equipe de Psicologia no SPA."
@@ -44,7 +34,7 @@ EXPECTED_COURSES = {
     "Arquitetura e Urbanismo": "Arquitetura",
 }
 REVIEW_NOTES = (
-    "Rascunho: catálogo, textos, metodologia, pesos e destinos aguardam validação institucional.",
+    "Catálogo fixo: textos, metodologia, pesos e destinos devem ter validação institucional.",
     "A planilha contém 74 afirmativas; o PDF menciona 82. As fontes não foram mescladas.",
     "Textos preservados: revisar especialmente 29 (Colcar) e 34 (instuição).",
     "Peso proposto: 1 por vínculo; área conta uma vez por frase; sem normalização automática.",
@@ -102,7 +92,7 @@ class Catalog:
         return {
             "source_file": "QUIZ FINAL.xlsx",
             **asdict(self),
-            "status": "draft",
+            "status": "fixed",
             "scoring_method": SCORING_METHOD,
             "weight_per_link": 1,
             "required_selection_count": 25,
@@ -225,141 +215,14 @@ def _parse_workbook(workbook, source_sha256: str) -> Catalog:
     )
 
 
-def _catalog_rows(catalog: Catalog, version_id: UUID) -> list[tuple[type, list[dict]]]:
-    def identifier(kind: str, key: str) -> UUID:
-        return uuid5(version_id, f"{kind}:{key}")
-
-    return [
-        (
-            Area,
-            [
-                dict(
-                    id=identifier("area", a.name),
-                    quiz_version_id=version_id,
-                    name=a.name,
-                    destination=a.destination,
-                    destination_instructions=PENDING_INSTRUCTIONS,
-                )
-                for a in catalog.areas
-            ],
-        ),
-        (
-            Course,
-            [
-                dict(
-                    id=identifier("course", c.name),
-                    quiz_version_id=version_id,
-                    name=c.name,
-                    area_id=identifier("area", c.area),
-                    description=None,
-                    destination=None,
-                    destination_instructions=None,
-                )
-                for c in catalog.courses
-            ],
-        ),
-        (
-            Statement,
-            [
-                dict(
-                    id=identifier("statement", str(s.source_number)),
-                    quiz_version_id=version_id,
-                    source_number=s.source_number,
-                    display_order=s.display_order,
-                    text=s.text,
-                )
-                for s in catalog.statements
-            ],
-        ),
-        (
-            StatementCourseWeight,
-            [
-                dict(
-                    quiz_version_id=version_id,
-                    statement_id=identifier("statement", str(s.source_number)),
-                    course_id=identifier("course", course),
-                    weight=1,
-                )
-                for s in catalog.statements
-                for course in s.courses
-            ],
-        ),
-    ]
-
-
-def _matches(connection: Connection, model: type, rows: list[dict], version_id: UUID) -> bool:
-    keys = list(rows[0])
-    actual = connection.execute(
-        select(*(getattr(model, key) for key in keys)).where(model.quiz_version_id == version_id)
-    )
-    return {tuple(row) for row in actual} == {tuple(row[key] for key in keys) for row in rows}
-
-
-@dataclass(frozen=True)
-class ImportResult:
-    version_id: UUID
-    version_number: int
-    status: str
-    created: bool
-
-
-def import_catalog(
-    engine: Engine, catalog: Catalog, *, version_number: int, event_name: str = "ISE Day"
-) -> ImportResult:
-    if type(version_number) is not int or version_number <= 0:
-        raise CatalogError("A versão deve ser um inteiro positivo.")
-    _string(event_name, "Nome do evento")
-    # One transaction, including all catalog rows. Serializes concurrent importer runs.
-    with engine.begin() as connection:
-        connection.execute(text("SELECT pg_advisory_xact_lock(735020251)"))
-        existing = (
-            connection.execute(
-                select(QuizVersion)
-                .where(QuizVersion.version_number == version_number)
-                .with_for_update()
-            )
-            .mappings()
-            .one_or_none()
-        )
-        version_id = existing["id"] if existing else uuid4()
-        version_values = dict(
-            event_name=event_name,
-            version_number=version_number,
-            required_selection_count=25,
-            scoring_method=SCORING_METHOD,
-            psychology_destination=PSYCHOLOGY_DESTINATION,
-            psychology_instructions=PSYCHOLOGY_INSTRUCTIONS,
-        )
-        tables = _catalog_rows(catalog, version_id)
-        if existing:
-            if any(existing[key] != value for key, value in version_values.items()) or not all(
-                _matches(connection, model, rows, version_id) for model, rows in tables
-            ):
-                raise CatalogError(
-                    f"A versão {version_number} já existe com conteúdo diferente; "
-                    "use outro número de versão. Nenhum dado foi alterado."
-                )
-            return ImportResult(version_id, version_number, existing["status"], False)
-        connection.execute(
-            insert(QuizVersion).values(id=version_id, status="draft", **version_values)
-        )
-        for model, rows in tables:
-            connection.execute(insert(model), rows)
-        return ImportResult(version_id, version_number, "draft", True)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("validate", "import"))
+    parser.add_argument("action", choices=("validate",))
     parser.add_argument("--file", type=Path, default=DEFAULT_WORKBOOK)
     parser.add_argument(
         "--report", type=Path, help="Salvar catálogo normalizado e pendências em JSON"
     )
-    parser.add_argument("--version", type=int, help="Número obrigatório para importar")
-    parser.add_argument("--event", default="ISE Day")
     args = parser.parse_args(argv)
-    if args.action == "import" and (args.version is None or args.version <= 0):
-        parser.error("import exige --version com inteiro positivo")
     if args.report and args.report.resolve() == args.file.resolve():
         parser.error("--report não pode sobrescrever a planilha de origem")
     try:
@@ -385,26 +248,9 @@ def main(argv: list[str] | None = None) -> int:
                 indent=2,
             )
         )
-        if args.action == "import":
-            engine = build_engine(get_settings())
-            try:
-                result = import_catalog(
-                    engine, catalog, version_number=args.version, event_name=args.event
-                )
-            finally:
-                engine.dispose()
-            print(json.dumps(asdict(result), default=str, ensure_ascii=False))
         return 0
     except (CatalogError, OSError, BadZipFile, InvalidFileException, KeyError) as exc:
         print(f"Erro de catálogo: {exc}", file=sys.stderr)
-        return 1
-    except (SQLAlchemyError, ValidationError):
-        # Never echo connection URLs, parameters or credentials in CLI diagnostics.
-        print(
-            "Erro de banco: verifique a conexão e execute alembic upgrade head. "
-            "A importação não foi concluída.",
-            file=sys.stderr,
-        )
         return 1
 
 

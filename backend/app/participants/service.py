@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session
 
+from app.catalog import EVENT_NAME, PSYCHOLOGY_DESTINATION, PSYCHOLOGY_INSTRUCTIONS
 from app.core.config import Settings
 from app.models import (
     Area,
@@ -18,7 +19,6 @@ from app.models import (
     ParticipationCourseResult,
     ParticipationFeedback,
     ParticipationSelection,
-    QuizVersion,
     Statement,
     StatementCourseWeight,
 )
@@ -53,29 +53,22 @@ def require_notice(settings: Settings) -> None:
 
 def current_quiz(session: Session, settings: Settings) -> CurrentQuiz:
     require_notice(settings)
-    version = session.scalar(
-        select(QuizVersion).where(QuizVersion.status == "published").with_for_update(read=True)
-    )
-    if version is None:
-        raise HTTPException(503, "Nenhum quiz publicado está disponível.")
     return CurrentQuiz(
-        **quiz_content(session, version).model_dump(),
+        **quiz_content(session).model_dump(),
         privacy_notice_version=settings.privacy_notice_version,
         privacy_notice_text=settings.privacy_notice_text,
     )
 
 
-def quiz_content(session: Session, version: QuizVersion) -> QuizContent:
-    statements = session.scalars(
-        select(Statement)
-        .where(Statement.quiz_version_id == version.id)
-        .order_by(Statement.display_order)
-    )
+def quiz_content(session: Session) -> QuizContent:
+    statements = list(session.scalars(select(Statement).order_by(Statement.display_order)))
+    if len(statements) < 25:
+        raise HTTPException(
+            503, "O catálogo fixo do quiz não está disponível. Execute as migrações."
+        )
     return QuizContent(
-        id=version.id,
-        version_number=version.version_number,
-        event_name=version.event_name,
-        required_selection_count=version.required_selection_count,
+        event_name=EVENT_NAME,
+        required_selection_count=25,
         statements=[
             PublicStatement(id=s.id, display_order=s.display_order, text=s.text) for s in statements
         ],
@@ -83,7 +76,7 @@ def quiz_content(session: Session, version: QuizVersion) -> QuizContent:
 
 
 def participant_quiz(session: Session, participant: Participation) -> QuizContent:
-    return quiz_content(session, session.get(QuizVersion, participant.quiz_version_id))
+    return quiz_content(session)
 
 
 def find_participation(session: Session, token: str | None) -> Participation | None:
@@ -110,7 +103,6 @@ def authenticated_participation(session: Session, token: str | None) -> Particip
 def session_summary(participant: Participation) -> ParticipationSession:
     return ParticipationSession(
         id=participant.id,
-        quiz_version_id=participant.quiz_version_id,
         status=participant.status,
         access_expires_at=participant.access_expires_at,
     )
@@ -130,15 +122,7 @@ def register(
             )
         return session_summary(existing), existing_token, False
 
-    # A share lock synchronizes with archival/publication. A stale version from a
-    # previously loaded page cannot accidentally start against the replacement.
-    version = session.scalar(
-        select(QuizVersion)
-        .where(QuizVersion.id == data.quiz_version_id, QuizVersion.status == "published")
-        .with_for_update(read=True)
-    )
-    if version is None:
-        raise HTTPException(409, "Essa versão do quiz não está disponível. Atualize a página.")
+    quiz_content(session)
     now = session.scalar(select(func.clock_timestamp()))
     token = secrets.token_urlsafe(32)
     participant = Participation(
@@ -153,33 +137,19 @@ def register(
     return session_summary(participant), token, True
 
 
-def load_scoring_catalog(
-    session: Session, version_id: UUID, *, allow_draft: bool = False
-) -> ScoringCatalog:
-    version = session.get(QuizVersion, version_id)
-    allowed = {"published", "archived", "draft"} if allow_draft else {"published", "archived"}
-    if version is None or version.status not in allowed:
-        raise ScoringConfigurationError("A participação não tem uma versão publicada.")
+def load_scoring_catalog(session: Session) -> ScoringCatalog:
     weights = defaultdict(list)
-    for link in session.scalars(
-        select(StatementCourseWeight).where(StatementCourseWeight.quiz_version_id == version_id)
-    ):
+    for link in session.scalars(select(StatementCourseWeight)):
         weights[link.statement_id].append(CourseWeight(link.course_id, link.weight))
     return ScoringCatalog(
-        quiz_version_id=version_id,
-        scoring_method=version.scoring_method,
-        area_ids=tuple(session.scalars(select(Area.id).where(Area.quiz_version_id == version_id))),
+        area_ids=tuple(session.scalars(select(Area.id))),
         courses=tuple(
             CourseDefinition(course.id, course.area_id)
-            for course in session.scalars(
-                select(Course).where(Course.quiz_version_id == version_id)
-            )
+            for course in session.scalars(select(Course))
         ),
         statements=tuple(
             StatementDefinition(statement_id, tuple(weights[statement_id]))
-            for statement_id in session.scalars(
-                select(Statement.id).where(Statement.quiz_version_id == version_id)
-            )
+            for statement_id in session.scalars(select(Statement.id))
         ),
     )
 
@@ -201,7 +171,6 @@ def saved_result(session: Session, participant: Participation) -> ParticipationR
     )
     return ParticipationResult(
         participation_id=participant.id,
-        quiz_version_id=participant.quiz_version_id,
         status=participant.status,
         submitted_at=participant.submitted_at,
         statement_ids=list(
@@ -251,16 +220,14 @@ def submit(session: Session, participant: Participation, statement_ids: list[UUI
             raise HTTPException(409, "A participação já foi submetida com outras escolhas.")
         return saved_result(session, participant)
     try:
-        score = calculate_scores(
-            load_scoring_catalog(session, participant.quiz_version_id), statement_ids
-        )
+        score = calculate_scores(load_scoring_catalog(session), statement_ids)
     except InvalidSelectionError as exc:
         raise HTTPException(422, str(exc)) from exc
     except ScoringConfigurationError as exc:
         raise HTTPException(
             503, "O catálogo do quiz está inconsistente. Procure a equipe."
         ) from exc
-    common = {"participation_id": participant.id, "quiz_version_id": participant.quiz_version_id}
+    common = {"participation_id": participant.id}
     session.execute(
         insert(ParticipationSelection),
         [dict(**common, statement_id=statement_id) for statement_id in statement_ids],
@@ -323,21 +290,19 @@ def record_feedback(session: Session, participant: Participation, data: Feedback
                 ParticipationCourseResult.participation_id == participant.id,
                 ParticipationCourseResult.is_recommended.is_(True),
                 Course.id == data.chosen_course_id,
-                Course.quiz_version_id == participant.quiz_version_id,
             )
         ).one_or_none()
         if row is None:
             raise HTTPException(422, "Escolha um dos cursos sugeridos para esta participação.")
         course, area = row
         # A course destination is an optional pair; otherwise use its area's exact
-        # published destination. Never guess a laboratory or mix the two pairs.
+        # configured destination. Never guess a laboratory or mix the two pairs.
         if course.destination is not None:
             destination, instructions = course.destination, course.destination_instructions
         else:
             destination, instructions = area.destination, area.destination_instructions
     else:
-        version = session.get(QuizVersion, participant.quiz_version_id)
-        destination, instructions = version.psychology_destination, version.psychology_instructions
+        destination, instructions = PSYCHOLOGY_DESTINATION, PSYCHOLOGY_INSTRUCTIONS
 
     now = session.scalar(select(func.clock_timestamp()))
     session.add(

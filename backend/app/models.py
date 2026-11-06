@@ -59,52 +59,15 @@ class AdminSession(UUIDPrimaryKey, CreatedAt, Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class QuizVersion(UUIDPrimaryKey, CreatedAt, Base):
-    __tablename__ = "quiz_versions"
-    __table_args__ = (
-        CheckConstraint("btrim(event_name) <> ''", name="event_name_nonempty"),
-        CheckConstraint("version_number > 0", name="version_number_positive"),
-        CheckConstraint("status IN ('draft', 'published', 'archived')", name="status_valid"),
-        CheckConstraint("required_selection_count = 25", name="selection_count_fixed"),
-        CheckConstraint(
-            "scoring_method = 'area_distinct_count_course_sum_v1'", name="scoring_method_valid"
-        ),
-        CheckConstraint(
-            "btrim(psychology_destination) <> ''", name="psychology_destination_nonempty"
-        ),
-        CheckConstraint(
-            "btrim(psychology_instructions) <> ''", name="psychology_instructions_nonempty"
-        ),
-        Index(
-            "uq_single_published_quiz",
-            "status",
-            unique=True,
-            postgresql_where=text("status = 'published'"),
-        ),
-    )
-
-    event_name: Mapped[str] = mapped_column(Text)
-    version_number: Mapped[int] = mapped_column(unique=True)
-    status: Mapped[str] = mapped_column(Text, server_default=text("'draft'"))
-    required_selection_count: Mapped[int] = mapped_column(SmallInteger, server_default=text("25"))
-    scoring_method: Mapped[str] = mapped_column(
-        Text, server_default=text("'area_distinct_count_course_sum_v1'")
-    )
-    psychology_destination: Mapped[str] = mapped_column(Text)
-    psychology_instructions: Mapped[str] = mapped_column(Text)
-
-
 class Area(UUIDPrimaryKey, Base):
     __tablename__ = "areas"
     __table_args__ = (
-        UniqueConstraint("id", "quiz_version_id"),
-        UniqueConstraint("quiz_version_id", "name"),
+        UniqueConstraint("name"),
         CheckConstraint("btrim(name) <> ''", name="name_nonempty"),
         CheckConstraint("btrim(destination) <> ''", name="destination_nonempty"),
         CheckConstraint("btrim(destination_instructions) <> ''", name="instructions_nonempty"),
     )
 
-    quiz_version_id: Mapped[UUID] = mapped_column(ForeignKey("quiz_versions.id"))
     name: Mapped[str] = mapped_column(Text)
     destination: Mapped[str] = mapped_column(Text)
     destination_instructions: Mapped[str] = mapped_column(Text)
@@ -113,9 +76,7 @@ class Area(UUIDPrimaryKey, Base):
 class Course(UUIDPrimaryKey, Base):
     __tablename__ = "courses"
     __table_args__ = (
-        UniqueConstraint("id", "quiz_version_id"),
-        UniqueConstraint("quiz_version_id", "name"),
-        ForeignKeyConstraint(["area_id", "quiz_version_id"], ["areas.id", "areas.quiz_version_id"]),
+        UniqueConstraint("name"),
         CheckConstraint("btrim(name) <> ''", name="name_nonempty"),
         CheckConstraint(
             "(destination IS NULL AND destination_instructions IS NULL) OR "
@@ -123,11 +84,10 @@ class Course(UUIDPrimaryKey, Base):
             "destination_instructions IS NOT NULL AND btrim(destination_instructions) <> '')",
             name="destination_pair",
         ),
-        Index("ix_courses_area", "area_id", "quiz_version_id"),
+        Index("ix_courses_area", "area_id"),
     )
 
-    quiz_version_id: Mapped[UUID] = mapped_column(ForeignKey("quiz_versions.id"))
-    area_id: Mapped[UUID]
+    area_id: Mapped[UUID] = mapped_column(ForeignKey("areas.id"))
     name: Mapped[str] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
     destination: Mapped[str | None] = mapped_column(Text)
@@ -137,15 +97,13 @@ class Course(UUIDPrimaryKey, Base):
 class Statement(UUIDPrimaryKey, Base):
     __tablename__ = "statements"
     __table_args__ = (
-        UniqueConstraint("id", "quiz_version_id"),
-        UniqueConstraint("quiz_version_id", "source_number", name="uq_statements_version_source"),
-        UniqueConstraint("quiz_version_id", "display_order", name="uq_statements_version_order"),
+        UniqueConstraint("source_number"),
+        UniqueConstraint("display_order"),
         CheckConstraint("source_number > 0", name="source_number_positive"),
         CheckConstraint("display_order > 0", name="display_order_positive"),
         CheckConstraint("btrim(text) <> ''", name="text_nonempty"),
     )
 
-    quiz_version_id: Mapped[UUID] = mapped_column(ForeignKey("quiz_versions.id"))
     source_number: Mapped[int] = mapped_column(SmallInteger)
     display_order: Mapped[int] = mapped_column(SmallInteger)
     text: Mapped[str] = mapped_column(Text)
@@ -154,26 +112,18 @@ class Statement(UUIDPrimaryKey, Base):
 class StatementCourseWeight(Base):
     __tablename__ = "statement_course_weights"
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["statement_id", "quiz_version_id"], ["statements.id", "statements.quiz_version_id"]
-        ),
-        ForeignKeyConstraint(
-            ["course_id", "quiz_version_id"], ["courses.id", "courses.quiz_version_id"]
-        ),
         CheckConstraint("weight > 0", name="weight_positive"),
-        Index("ix_weights_course", "course_id", "quiz_version_id"),
+        Index("ix_weights_course", "course_id"),
     )
 
-    quiz_version_id: Mapped[UUID] = mapped_column(ForeignKey("quiz_versions.id"))
-    statement_id: Mapped[UUID] = mapped_column(primary_key=True)
-    course_id: Mapped[UUID] = mapped_column(primary_key=True)
+    statement_id: Mapped[UUID] = mapped_column(ForeignKey("statements.id"), primary_key=True)
+    course_id: Mapped[UUID] = mapped_column(ForeignKey("courses.id"), primary_key=True)
     weight: Mapped[int] = mapped_column(SmallInteger, server_default=text("1"))
 
 
 class Participation(UUIDPrimaryKey, Base):
     __tablename__ = "participations"
     __table_args__ = (
-        UniqueConstraint("id", "quiz_version_id"),
         CheckConstraint("btrim(school_name) <> ''", name="school_name_nonempty"),
         CheckConstraint("btrim(full_name) <> ''", name="full_name_nonempty"),
         CheckConstraint(r"phone ~ '^\+55[1-9][0-9][0-9]{8,9}$'", name="phone_format"),
@@ -201,10 +151,8 @@ class Participation(UUIDPrimaryKey, Base):
         Index("ix_participations_started", text("started_at DESC"), "id"),
         Index("ix_participations_school", "school_name", text("started_at DESC")),
         Index("ix_participations_status", "status", text("started_at DESC")),
-        Index("ix_participations_version", "quiz_version_id"),
     )
 
-    quiz_version_id: Mapped[UUID] = mapped_column(ForeignKey("quiz_versions.id"))
     school_name: Mapped[str] = mapped_column(Text)
     full_name: Mapped[str] = mapped_column(Text)
     phone: Mapped[str] = mapped_column(String(14))
@@ -220,39 +168,25 @@ class Participation(UUIDPrimaryKey, Base):
 
 class ParticipationSelection(Base):
     __tablename__ = "participation_selections"
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["participation_id", "quiz_version_id"],
-            ["participations.id", "participations.quiz_version_id"],
-            ondelete="CASCADE",
-        ),
-        ForeignKeyConstraint(
-            ["statement_id", "quiz_version_id"], ["statements.id", "statements.quiz_version_id"]
-        ),
-    )
 
-    participation_id: Mapped[UUID] = mapped_column(primary_key=True)
-    quiz_version_id: Mapped[UUID]
-    statement_id: Mapped[UUID] = mapped_column(primary_key=True)
+    participation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("participations.id", ondelete="CASCADE"), primary_key=True
+    )
+    statement_id: Mapped[UUID] = mapped_column(ForeignKey("statements.id"), primary_key=True)
 
 
 class ParticipationAreaResult(Base):
     __tablename__ = "participation_area_results"
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["participation_id", "quiz_version_id"],
-            ["participations.id", "participations.quiz_version_id"],
-            ondelete="CASCADE",
-        ),
-        ForeignKeyConstraint(["area_id", "quiz_version_id"], ["areas.id", "areas.quiz_version_id"]),
         CheckConstraint("score BETWEEN 0 AND 25", name="score_range"),
         CheckConstraint("NOT is_winner OR score > 0", name="winner_positive"),
         Index("ix_area_winners", "area_id", "participation_id", postgresql_where=text("is_winner")),
     )
 
-    participation_id: Mapped[UUID] = mapped_column(primary_key=True)
-    quiz_version_id: Mapped[UUID]
-    area_id: Mapped[UUID] = mapped_column(primary_key=True)
+    participation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("participations.id", ondelete="CASCADE"), primary_key=True
+    )
+    area_id: Mapped[UUID] = mapped_column(ForeignKey("areas.id"), primary_key=True)
     score: Mapped[int] = mapped_column(SmallInteger)
     is_winner: Mapped[bool]
 
@@ -260,14 +194,6 @@ class ParticipationAreaResult(Base):
 class ParticipationCourseResult(Base):
     __tablename__ = "participation_course_results"
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["participation_id", "quiz_version_id"],
-            ["participations.id", "participations.quiz_version_id"],
-            ondelete="CASCADE",
-        ),
-        ForeignKeyConstraint(
-            ["course_id", "quiz_version_id"], ["courses.id", "courses.quiz_version_id"]
-        ),
         CheckConstraint("score >= 0", name="score_nonnegative"),
         CheckConstraint("NOT is_recommended OR score > 0", name="recommended_positive"),
         Index(
@@ -278,9 +204,10 @@ class ParticipationCourseResult(Base):
         ),
     )
 
-    participation_id: Mapped[UUID] = mapped_column(primary_key=True)
-    quiz_version_id: Mapped[UUID]
-    course_id: Mapped[UUID] = mapped_column(primary_key=True)
+    participation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("participations.id", ondelete="CASCADE"), primary_key=True
+    )
+    course_id: Mapped[UUID] = mapped_column(ForeignKey("courses.id"), primary_key=True)
     score: Mapped[int]
     is_recommended: Mapped[bool]
 

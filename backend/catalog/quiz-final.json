@@ -659,7 +659,7 @@
       ]
     }
   ],
-  "status": "draft",
+  "status": "fixed",
   "scoring_method": "area_distinct_count_course_sum_v1",
   "weight_per_link": 1,
   "required_selection_count": 25,
@@ -692,7 +692,7 @@
   },
   "identical_course_mappings": [],
   "review_notes": [
-    "Rascunho: catálogo, textos, metodologia, pesos e destinos aguardam validação institucional.",
+    "Catálogo fixo: textos, metodologia, pesos e destinos devem ter validação institucional.",
     "A planilha contém 74 afirmativas; o PDF menciona 82. As fontes não foram mescladas.",
     "Textos preservados: revisar especialmente 29 (Colcar) e 34 (instuição).",
     "Peso proposto: 1 por vínculo; área conta uma vez por frase; sem normalização automática.",

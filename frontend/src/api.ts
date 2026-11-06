@@ -1,7 +1,5 @@
 export type Statement = { id: string; display_order: number; text: string }
 export type Quiz = {
-  id: string
-  version_number: number
   event_name: string
   required_selection_count: number
   statements: Statement[]
@@ -9,7 +7,6 @@ export type Quiz = {
 export type CurrentQuiz = Quiz & { privacy_notice_version: string; privacy_notice_text: string }
 export type Participant = {
   id: string
-  quiz_version_id: string
   status: 'draft' | 'submitted' | 'completed'
   access_expires_at: string
 }
@@ -38,7 +35,6 @@ export type Referral = Feedback & {
 }
 export type Result = {
   participation_id: string
-  quiz_version_id: string
   status: 'submitted' | 'completed'
   submitted_at: string
   statement_ids: string[]
@@ -47,7 +43,6 @@ export type Result = {
   feedback: Referral | null
 }
 export type Registration = {
-  quiz_version_id: string
   school_name: string
   full_name: string
   phone: string

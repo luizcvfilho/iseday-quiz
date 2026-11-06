@@ -49,27 +49,17 @@ unset password
 
 # Os dados fictícios só são criados no banco *_test do projeto temporário.
 "${compose[@]}" exec -T api /app/.venv/bin/python - <<'PY'
-from sqlalchemy import update
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.admin.__main__ import save_account
-from app.catalog import DEFAULT_WORKBOOK, import_catalog, read_catalog
 from app.core.config import get_settings
 from app.db import build_engine
-from app.models import QuizVersion
 
 settings = get_settings()
 assert make_url(str(settings.database_url)).database == "iseday_production_test"
 engine = build_engine(settings)
 try:
-    imported = import_catalog(engine, read_catalog(DEFAULT_WORKBOOK), version_number=1)
-    with engine.begin() as connection:
-        connection.execute(
-            update(QuizVersion)
-            .where(QuizVersion.id == imported.version_id)
-            .values(status="published")
-        )
     with Session(engine) as session, session.begin():
         save_account(
             session, "create", "admin@example.org", "admin test password only", "Equipe de teste"
@@ -82,14 +72,14 @@ https_address="$("${compose[@]}" port frontend 443)"
 export ISEDAY_PRODUCTION_TEST_URL="https://localhost:${https_address##*:}"
 npm --prefix frontend test -- --workers=1
 
-# Reiniciar os containers não pode apagar a participação nem a versão publicada.
+# Reiniciar os containers não pode apagar a participação nem o catálogo fixo.
 "${compose[@]}" restart db api frontend
 "${compose[@]}" up --detach --wait --wait-timeout 120
 "${compose[@]}" exec -T api /app/.venv/bin/python - <<'PY'
 from sqlalchemy import func, select
 from app.core.config import get_settings
 from app.db import build_engine
-from app.models import Participation, QuizVersion
+from app.models import Participation, Statement, Course
 
 engine = build_engine(get_settings())
 try:
@@ -97,9 +87,8 @@ try:
         assert connection.scalar(
             select(func.count()).select_from(Participation).where(Participation.status == "completed")
         ) == 1
-        assert connection.scalar(
-            select(QuizVersion.version_number).where(QuizVersion.status == "published")
-        ) == 2
+        assert connection.scalar(select(func.count()).select_from(Statement)) == 74
+        assert connection.scalar(select(func.count()).select_from(Course)) == 9
 finally:
     engine.dispose()
 PY

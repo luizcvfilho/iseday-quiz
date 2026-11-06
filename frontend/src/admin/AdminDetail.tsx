@@ -107,7 +107,7 @@ export function AdminDetail() {
               label={statusLabel[data.status]}
               color={data.status === 'completed' ? 'success' : 'default'}
             />
-            <Chip variant="outlined" label={`${data.event_name} · versão ${data.version_number}`} />
+            <Chip variant="outlined" label={data.event_name} />
           </Stack>
           <Paper component="section" variant="outlined" sx={{ p: 3, mb: 3 }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>

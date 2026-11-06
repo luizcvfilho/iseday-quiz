@@ -30,7 +30,6 @@ STATEMENTS = tuple(identifier(i) for i in range(101, 127))
 def make_catalog(links):
     """Each list item gives the course indexes and weights for one statement."""
     return ScoringCatalog(
-        quiz_version_id=identifier(1000),
         area_ids=AREAS,
         courses=tuple(
             CourseDefinition(course, AREAS[index // 2]) for index, course in enumerate(COURSES)
@@ -50,7 +49,6 @@ def test_distinct_area_per_statement_weighted_courses_and_zero_results():
     # The first statement also reaches the second area. Area scores stay unweighted.
     catalog = make_catalog([[(0, 1), (1, 3), (2, 2)]] + [[(0, 1), (1, 3)]] * 24 + [[(4, 1)]])
     result = calculate_scores(catalog, STATEMENTS[:25])
-    assert result.quiz_version_id == catalog.quiz_version_id
     assert result.areas == (
         AreaScore(AREAS[0], 25, True),
         AreaScore(AREAS[1], 1, False),
@@ -130,9 +128,9 @@ def test_rejects_25_choices_with_repetition():
         calculate_scores(catalog, (*STATEMENTS[:24], STATEMENTS[0]))
 
 
-def test_rejects_unknown_or_other_version_statement():
+def test_rejects_unknown_statement():
     catalog = make_catalog([[(0, 1)]] * 25)
-    with pytest.raises(InvalidSelectionError, match="outra versão"):
+    with pytest.raises(InvalidSelectionError, match="inexistente"):
         calculate_scores(catalog, (*STATEMENTS[:24], uuid4()))
 
 
@@ -169,7 +167,7 @@ def test_rejects_unsupported_scoring_method():
         calculate_scores(catalog, STATEMENTS[:25])
 
 
-def test_rejects_course_from_another_area_version():
+def test_rejects_course_from_unknown_area():
     catalog = make_catalog([[(0, 1)]] * 25)
     catalog = replace(
         catalog, courses=(replace(catalog.courses[0], area_id=uuid4()), *catalog.courses[1:])
@@ -178,7 +176,7 @@ def test_rejects_course_from_another_area_version():
         calculate_scores(catalog, STATEMENTS[:25])
 
 
-def test_rejects_link_to_course_outside_this_version():
+def test_rejects_link_to_unknown_course():
     catalog = make_catalog([[(0, 1)]] * 25)
     catalog = replace(
         catalog,
@@ -211,7 +209,6 @@ def workbook_catalog():
     areas = {area.name: uuid5(version_id, f"area:{area.name}") for area in source.areas}
     courses = {course.name: uuid5(version_id, f"course:{course.name}") for course in source.courses}
     snapshot = ScoringCatalog(
-        quiz_version_id=version_id,
         area_ids=tuple(areas.values()),
         courses=tuple(CourseDefinition(courses[c.name], areas[c.area]) for c in source.courses),
         statements=tuple(

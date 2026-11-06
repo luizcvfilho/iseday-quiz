@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
-from app.admin import management, management_schemas, security, service
+from app.admin import management, security, service
 from app.admin.schemas import (
     AdminIdentity,
     Filters,
@@ -160,59 +160,6 @@ def detail(participation_id: UUID, access: Access):
 def summary(access: Access, filters: ReportFilters):
     result = service.summary(access.session, filters)
     security.audit(access.session, access.user, "summary.view")
-    return result
-
-
-@router.get("/versions", response_model=list[management_schemas.VersionItem])
-def versions(access: Access):
-    return management.versions(access.session)
-
-
-@router.get("/versions/{version_id}", response_model=management_schemas.VersionDetail)
-def version_detail(version_id: UUID, access: Access):
-    return management.version_detail(access.session, version_id)
-
-
-@router.post(
-    "/versions",
-    response_model=management_schemas.VersionDetail,
-    status_code=201,
-    dependencies=WRITE,
-)
-def create_version(data: management_schemas.NewVersion, access: WriteAccess):
-    result = management.create_version(access.session, data)
-    security.audit(access.session, access.user, f"versions.create:{result.id}")
-    return result
-
-
-@router.post(
-    "/versions/{version_id}", response_model=management_schemas.VersionDetail, dependencies=WRITE
-)
-def update_version(version_id: UUID, data: management_schemas.VersionInput, access: WriteAccess):
-    result = management.save_version(access.session, version_id, data)
-    security.audit(access.session, access.user, f"versions.update:{version_id}")
-    return result
-
-
-@router.post(
-    "/versions/{version_id}/publish",
-    response_model=management_schemas.VersionDetail,
-    dependencies=WRITE,
-)
-def publish_version(version_id: UUID, data: management_schemas.PublishVersion, access: WriteAccess):
-    result = management.publish(access.session, version_id, data)
-    security.audit(access.session, access.user, f"versions.publish:{version_id}")
-    return result
-
-
-@router.post(
-    "/versions/{version_id}/archive",
-    response_model=management_schemas.VersionDetail,
-    dependencies=WRITE,
-)
-def archive_version(version_id: UUID, access: WriteAccess):
-    result = management.archive(access.session, version_id)
-    security.audit(access.session, access.user, f"versions.archive:{version_id}")
     return result
 
 

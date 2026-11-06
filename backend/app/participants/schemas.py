@@ -19,7 +19,6 @@ Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max
 class Registration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    quiz_version_id: UUID
     school_name: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
     ]
@@ -66,8 +65,6 @@ class PublicStatement(BaseModel):
 
 
 class QuizContent(BaseModel):
-    id: UUID
-    version_number: int
     event_name: str
     required_selection_count: int
     statements: list[PublicStatement]
@@ -80,7 +77,6 @@ class CurrentQuiz(QuizContent):
 
 class ParticipationSession(BaseModel):
     id: UUID
-    quiz_version_id: UUID
     status: Literal["draft", "submitted", "completed"]
     access_expires_at: datetime
 
@@ -114,7 +110,6 @@ class FeedbackResult(BaseModel):
 
 class ParticipationResult(BaseModel):
     participation_id: UUID
-    quiz_version_id: UUID
     status: Literal["submitted", "completed"]
     submitted_at: datetime
     statement_ids: list[UUID]

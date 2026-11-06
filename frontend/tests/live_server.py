@@ -8,12 +8,10 @@ import uvicorn
 from alembic import command
 from alembic.config import Config
 from app.admin.__main__ import save_account
-from app.catalog import DEFAULT_WORKBOOK, import_catalog, read_catalog
 from app.core.config import Settings
 from app.db import get_session
 from app.main import create_app
-from app.models import QuizVersion
-from sqlalchemy import create_engine, text, update
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
@@ -41,15 +39,6 @@ def main():
             )
             config.attributes["connection"] = connection
             command.upgrade(config, "head")
-        imported = import_catalog(
-            engine, read_catalog(DEFAULT_WORKBOOK), version_number=1
-        )
-        with engine.begin() as connection:
-            connection.execute(
-                update(QuizVersion)
-                .where(QuizVersion.id == imported.version_id)
-                .values(status="published")
-            )
         with Session(engine) as session, session.begin():
             save_account(
                 session,

@@ -24,7 +24,6 @@ class AdminIdentity(BaseModel):
 class Filters(BaseModel):
     q: str = Field(default="", max_length=200)
     school_name: str | None = Field(default=None, max_length=200)
-    quiz_version_id: UUID | None = None
     status: Literal["draft", "submitted", "completed"] | None = None
     area_id: UUID | None = None
     course_id: UUID | None = None
@@ -51,27 +50,16 @@ class PageFilters(Filters):
     page_size: int = Field(default=20, ge=1, le=100)
 
 
-class VersionItem(NamedItem):
-    version_number: int
-
-
-class CatalogItem(NamedItem):
-    quiz_version_id: UUID
-
-
 class Options(BaseModel):
     schools: list[str]
-    versions: list[VersionItem]
-    areas: list[CatalogItem]
-    courses: list[CatalogItem]
+    areas: list[NamedItem]
+    courses: list[NamedItem]
 
 
 class ParticipationRow(BaseModel):
     id: UUID
     full_name: str
     school_name: str
-    quiz_version_id: UUID
-    version_number: int
     status: Literal["draft", "submitted", "completed"]
     started_at: datetime
     submitted_at: datetime | None
@@ -99,7 +87,6 @@ class ParticipationDetail(ParticipationRow):
 
 class CountItem(NamedItem):
     count: int
-    version_number: int | None = None
 
 
 class SchoolCount(BaseModel):

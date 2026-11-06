@@ -4,7 +4,6 @@ import pytest
 from openpyxl import load_workbook
 
 from app.catalog import DEFAULT_WORKBOOK, CatalogError, main, read_catalog
-from app.core.config import Settings
 
 
 def test_original_catalog_and_review_snapshot():
@@ -121,7 +120,7 @@ def test_validation_cli_needs_no_database(monkeypatch, tmp_path, capsys):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     output = tmp_path / "review.json"
     assert main(["validate", "--report", str(output)]) == 0
-    assert json.loads(output.read_text(encoding="utf-8"))["status"] == "draft"
+    assert json.loads(output.read_text(encoding="utf-8"))["status"] == "fixed"
     assert '"links": 78' in capsys.readouterr().out
 
 
@@ -140,20 +139,7 @@ def test_report_cannot_overwrite_source():
     assert exc.value.code == 2
 
 
-def test_invalid_database_configuration_never_prints_credentials(monkeypatch, capsys):
-    def invalid_settings():
-        return Settings(database_url="private-password-in-invalid-url")
-
-    monkeypatch.setattr("app.catalog.get_settings", invalid_settings)
-    assert main(["import", "--version", "1"]) == 1
-    output = capsys.readouterr()
-    assert "Erro de banco" in output.err
-    assert "private-password" not in output.err + output.out
-
-
-@pytest.mark.parametrize("version", [None, "0", "-1"])
-def test_import_requires_positive_explicit_version(version):
-    args = ["import"] + (["--version", version] if version is not None else [])
+def test_import_command_is_removed():
     with pytest.raises(SystemExit) as exc:
-        main(args)
+        main(["import"])
     assert exc.value.code == 2

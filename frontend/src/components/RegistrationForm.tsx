@@ -38,7 +38,6 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
     }
     setPhoneError('')
     onSubmit({
-      quiz_version_id: quiz.id,
       school_name: schoolName.trim(),
       full_name: String(fields.get('full_name')).trim(),
       phone,

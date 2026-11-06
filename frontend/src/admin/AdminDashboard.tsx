@@ -33,7 +33,6 @@ import { AdminExport } from './AdminExport'
 type FilterState = Record<
   | 'q'
   | 'school_name'
-  | 'quiz_version_id'
   | 'status'
   | 'area_id'
   | 'course_id'
@@ -45,7 +44,6 @@ type FilterState = Record<
 const empty: FilterState = {
   q: '',
   school_name: '',
-  quiz_version_id: '',
   status: '',
   area_id: '',
   course_id: '',
@@ -119,7 +117,6 @@ export function AdminDashboard() {
     setFilters((current) => ({
       ...current,
       [key]: value,
-      ...(key === 'quiz_version_id' ? { area_id: '', course_id: '' } : {}),
     }))
   const apply = (event: FormEvent) => {
     event.preventDefault()
@@ -156,8 +153,6 @@ export function AdminDashboard() {
       ))}
     </TextField>
   )
-  const versionLabel = (id: string) =>
-    options?.versions.find((v) => v.id === id)?.version_number ?? '—'
   return (
     <>
       <Stack
@@ -222,44 +217,12 @@ export function AdminDashboard() {
             options?.schools.map((name) => ({ id: name, name })) ?? [],
           )}
           {select(
-            'quiz_version_id',
-            'Versão do quiz',
-            options?.versions.map((v) => ({
-              id: v.id,
-              name: `${v.name} · versão ${v.version_number}`,
-            })) ?? [],
-          )}
-          {select(
             'status',
             'Situação',
             Object.entries(statusLabel).map(([id, name]) => ({ id, name })),
           )}
-          {select(
-            'area_id',
-            'Área vencedora',
-            options?.areas
-              .filter(
-                (v) =>
-                  !filters.quiz_version_id || v.quiz_version_id === filters.quiz_version_id,
-              )
-              .map((v) => ({
-                ...v,
-                name: `${v.name} · v${versionLabel(v.quiz_version_id)}`,
-              })) ?? [],
-          )}
-          {select(
-            'course_id',
-            'Curso sugerido',
-            options?.courses
-              .filter(
-                (v) =>
-                  !filters.quiz_version_id || v.quiz_version_id === filters.quiz_version_id,
-              )
-              .map((v) => ({
-                ...v,
-                name: `${v.name} · v${versionLabel(v.quiz_version_id)}`,
-              })) ?? [],
-          )}
+          {select('area_id', 'Área vencedora', options?.areas ?? [])}
+          {select('course_id', 'Curso sugerido', options?.courses ?? [])}
           {select('agreement', 'Confirmação do resultado', [
             { id: 'yes', name: 'Concordou' },
             { id: 'no', name: 'Discordou' },
@@ -430,9 +393,6 @@ export function AdminDashboard() {
                         <Typography variant="body2" color="text.secondary">
                           {row.school_name}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Versão {row.version_number}
-                        </Typography>
                       </TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>
                         {dateTime(row.started_at)}
@@ -553,11 +513,6 @@ function Distribution({
               >
                 <Box>
                   <Typography variant="body2">{item.name}</Typography>
-                  {item.version_number != null && (
-                    <Typography variant="caption" color="text.secondary">
-                      Versão {item.version_number}
-                    </Typography>
-                  )}
                 </Box>
                 <Typography sx={{ fontWeight: 600 }}>{item.count}</Typography>
               </Stack>

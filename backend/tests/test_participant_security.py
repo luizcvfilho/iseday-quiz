@@ -104,7 +104,6 @@ def test_validation_errors_do_not_echo_personal_inputs(client):
 
 def test_phone_requires_brazilian_country_code_and_area_code():
     data = dict(
-        quiz_version_id="00000000-0000-0000-0000-000000000001",
         school_name="Escola de teste",
         full_name=" Student ",
         phone="+5511999999999",

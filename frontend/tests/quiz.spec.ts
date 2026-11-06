@@ -7,8 +7,6 @@ const statements = Array.from({ length: 30 }, (_, i) => ({
   display_order: i + 1,
 }))
 const quiz = {
-  id: 'version-old',
-  version_number: 1,
   event_name: 'ISE Day',
   required_selection_count: 25,
   statements,
@@ -20,7 +18,6 @@ async function mockApi(page: Page) {
   const state = {
     session: null as null | {
       id: string
-      quiz_version_id: string
       status: string
       access_expires_at: string
     },
@@ -52,7 +49,6 @@ async function mockApi(page: Page) {
       expect(request.postDataJSON()).not.toHaveProperty('school_id')
       state.session = {
         id: 'participant-1',
-        quiz_version_id: quiz.id,
         status: 'draft',
         access_expires_at: new Date(Date.now() + 3600_000).toISOString(),
       }
@@ -66,7 +62,6 @@ async function mockApi(page: Page) {
       state.session!.status = 'submitted'
       state.saved = {
         participation_id: 'participant-1',
-        quiz_version_id: quiz.id,
         status: 'submitted',
         submitted_at: new Date().toISOString(),
         statement_ids: ids,
@@ -238,7 +233,7 @@ test('falha dupla mantém escolhas e repete o mesmo conjunto', async ({ page }) 
   expect(state.submissions).toBe(2)
 })
 
-test('rascunho retoma sua versão e resultado concluído retoma o encaminhamento', async ({
+test('participação retoma o quiz e resultado concluído retoma o encaminhamento', async ({
   page,
 }) => {
   await mockApi(page)

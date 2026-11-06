@@ -7,7 +7,7 @@ from alembic import command
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import DBAPIError
 
-from app.models import Participation, ParticipationSelection, QuizVersion, StatementCourseWeight
+from app.models import Participation, ParticipationSelection
 
 from .conftest import migration_config
 from .helpers import catalog, participation, results, selections, submit
@@ -69,35 +69,6 @@ def test_submission_waits_for_selection_write_and_rechecks_count(concurrent_data
             future.result(timeout=6)
     with engine.connect() as db:
         assert db.scalar(select(Participation.status)) == "draft"
-
-
-def test_publication_waits_for_catalog_write_and_revalidates(concurrent_database):
-    engine = concurrent_database
-    with engine.begin() as db:
-        quiz = catalog(db, publish=False)
-    backend_pid = Queue()
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        with engine.connect() as writer:
-            transaction = writer.begin()
-            try:
-                writer.execute(
-                    delete(StatementCourseWeight).where(
-                        StatementCourseWeight.statement_id == quiz.statements[-1]
-                    )
-                )
-                future = executor.submit(
-                    run_blocked_statement,
-                    engine,
-                    backend_pid,
-                    update(QuizVersion).values(status="published"),
-                )
-                assert_waits_for_lock(writer, backend_pid.get(timeout=3))
-            finally:
-                transaction.commit()
-        with pytest.raises(DBAPIError, match="Every statement"):
-            future.result(timeout=6)
-    with engine.connect() as db:
-        assert db.scalar(select(QuizVersion.status)) == "draft"
 
 
 def test_submission_blocks_late_changes_to_results_and_selections(concurrent_database):

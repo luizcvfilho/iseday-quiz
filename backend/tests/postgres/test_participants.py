@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from fastapi.testclient import TestClient
-from sqlalchemy import event, func, select, update
+from sqlalchemy import event, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -20,7 +20,6 @@ from app.models import (
     ParticipationCourseResult,
     ParticipationFeedback,
     ParticipationSelection,
-    QuizVersion,
 )
 from app.participants import service
 from app.participants.security import token_hash
@@ -38,10 +37,11 @@ def api(empty_database, request):
     engine = empty_database
     with engine.begin() as db:
         command.upgrade(migration_config(db), "head")
-        quiz = catalog(db, publish=False)
+        quiz = catalog(db)
         options = getattr(request, "param", {})
         if "course_destination" in options:
             destination, instructions = options["course_destination"]
+            db.execute(text("ALTER TABLE courses DISABLE TRIGGER USER"))
             db.execute(
                 update(Course)
                 .where(Course.id == quiz.courses[0])
@@ -50,9 +50,7 @@ def api(empty_database, request):
                     destination_instructions=instructions,
                 )
             )
-        db.execute(
-            update(QuizVersion).where(QuizVersion.id == quiz.version).values(status="published")
-        )
+            db.execute(text("ALTER TABLE courses ENABLE TRIGGER USER"))
     settings = Settings(
         app_env="test",
         database_url="postgresql+psycopg://unused:unused@localhost/unused_test",
@@ -68,7 +66,6 @@ def api(empty_database, request):
 
     app.dependency_overrides[get_session] = database
     payload = dict(
-        quiz_version_id=str(quiz.version),
         school_name="Test school",
         full_name="Test Student",
         phone="+5511999999999",
@@ -117,7 +114,6 @@ def test_public_quiz_does_not_expose_weights(api):
     response = api.client.get("/api/quiz/current")
     assert response.status_code == 200
     body = response.json()
-    assert body["id"] == str(api.quiz.version)
     assert body["required_selection_count"] == 25
     assert len(body["statements"]) == 26
     assert body["privacy_notice_version"] == "test-v1"
@@ -170,7 +166,6 @@ def test_production_uses_secure_host_cookie(api):
         ("school_name", "x" * 201, 422),
         ("school_name", None, 422),
         ("school_id", str(uuid4()), 422),
-        ("quiz_version_id", str(uuid4()), 409),
         ("privacy_notice_version", "old-notice", 409),
         ("status", "submitted", 422),
     ],
@@ -185,13 +180,6 @@ def test_rejects_missing_notice(api):
     api.settings.privacy_notice_text = None
     assert register(api).status_code == 503
     assert api.client.get("/api/quiz/current").status_code == 503
-
-
-def test_unpublished_quiz_is_unavailable(api):
-    with api.engine.begin() as db:
-        db.execute(update(QuizVersion).values(status="archived"))
-    assert api.client.get("/api/quiz/current").status_code == 503
-    assert register(api).status_code == 409
 
 
 def test_submit_persists_complete_results_and_replays_identical_choices(api, monkeypatch):
@@ -230,9 +218,7 @@ def test_rejects_invalid_selections_without_partial_writes(api, kind):
     elif kind == "unknown":
         ids[-1] = uuid4()
     else:
-        with api.engine.begin() as db:
-            other = catalog(db, number=2, publish=False)
-        ids[-1] = other.statements[0]
+        ids[-1] = uuid4()
     assert submit(api, ids=ids).status_code == 422
     assert counts(api) == [0, 0, 0]
     assert api.client.get("/api/participations/me").json()["status"] == "draft"
@@ -313,27 +299,6 @@ def test_expiry_revocation_and_idempotent_end_preserve_history(api):
     assert api.client.get("/api/participations/me").status_code == 401
     assert submit(api).status_code == 401
     assert first["id"] != second["id"]
-
-
-def test_existing_participation_can_submit_after_version_archival(api):
-    assert api.client.get("/api/participations/me/quiz").status_code == 401
-    register(api)
-    with api.engine.begin() as db:
-        db.execute(
-            update(QuizVersion).where(QuizVersion.id == api.quiz.version).values(status="archived")
-        )
-        catalog(db, number=2)
-    original = api.client.get("/api/participations/me/quiz")
-    assert original.status_code == 200
-    assert original.json()["id"] == str(api.quiz.version)
-    assert {s["id"] for s in original.json()["statements"]} == {str(s) for s in api.quiz.statements}
-    assert "privacy_notice_text" not in original.json()
-    assert "weight" not in original.text
-    assert original.headers["cache-control"] == "no-store"
-    assert submit(api).status_code == 200
-    assert api.client.get("/api/participations/me/result").json()["quiz_version_id"] == str(
-        api.quiz.version
-    )
 
 
 def test_api_rate_limits_and_cannot_bypass_with_forwarded_header(api):
@@ -446,29 +411,14 @@ def test_feedback_prefers_complete_course_destination_pair(api):
     assert confirm(api, course=api.quiz.courses[0]).json() == body
 
 
-def test_negative_feedback_uses_original_version_psychology_destination(api):
+def test_negative_feedback_uses_fixed_psychology_destination(api):
     register(api)
     submit(api)
-    with api.engine.begin() as db:
-        db.execute(
-            update(QuizVersion).where(QuizVersion.id == api.quiz.version).values(status="archived")
-        )
-        newer = catalog(db, number=2, publish=False)
-        db.execute(
-            update(QuizVersion)
-            .where(QuizVersion.id == newer.version)
-            .values(
-                psychology_destination="New SPA",
-                psychology_instructions="New instructions",
-                status="published",
-            )
-        )
     response = confirm(api, agrees=False)
-    assert response.status_code == 200, response.text
     body = response.json()
     assert body["agrees_with_result"] is False and body["chosen_course_id"] is None
     assert body["destination"] == "SPA"
-    assert body["destination_instructions"] == "Find the Psychology team"
+    assert body["destination_instructions"] == "Procure a equipe de Psicologia no SPA."
     assert confirm(api, agrees=False).json() == body
     api.settings.privacy_notice_text = None
     assert api.client.get("/api/participations/me/result").json()["feedback"] == body
@@ -504,8 +454,7 @@ def test_feedback_rejects_courses_outside_saved_recommendations(api, kind):
     submit(api)
     course = api.quiz.courses[1] if kind == "not_recommended" else uuid4()
     if kind == "foreign":
-        with api.engine.begin() as db:
-            course = catalog(db, number=2, publish=False).courses[0]
+        course = uuid4()
     response = confirm(api, course=course)
     assert response.status_code == 422
     assert feedback_count(api) == 0

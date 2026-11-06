@@ -19,8 +19,6 @@ const row = {
   id: 'p1',
   full_name: 'Ana de Teste',
   school_name: 'Escola de teste',
-  quiz_version_id: 'v1',
-  version_number: 1,
   status: 'completed',
   started_at: '2026-10-30T12:00:00Z',
   submitted_at: '2026-10-30T12:05:00Z',
@@ -71,9 +69,8 @@ async function mockAdmin(page: Page, authenticated = false) {
     if (url.pathname === '/api/admin/options')
       return reply(200, {
         schools: [row.school_name],
-        versions: [{ id: 'v1', name: 'ISE Day', version_number: 1 }],
-        areas: areas.map((a) => ({ ...a, quiz_version_id: 'v1' })),
-        courses: courses.map((c) => ({ ...c, quiz_version_id: 'v1' })),
+        areas,
+        courses,
       })
     if (state.failReports)
       return reply(503, { detail: 'Serviço indisponível. Tente novamente.' })
@@ -104,7 +101,6 @@ async function mockAdmin(page: Page, authenticated = false) {
         })),
         result: {
           participation_id: 'p1',
-          quiz_version_id: 'v1',
           status: 'completed',
           submitted_at: row.submitted_at,
           statement_ids: [],

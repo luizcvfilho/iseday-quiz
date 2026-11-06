@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import insert, update
+from sqlalchemy import delete, insert, text, update
 
 from app.models import (
     Area,
@@ -12,7 +12,6 @@ from app.models import (
     ParticipationCourseResult,
     ParticipationFeedback,
     ParticipationSelection,
-    QuizVersion,
     Statement,
     StatementCourseWeight,
 )
@@ -20,32 +19,24 @@ from app.models import (
 
 @dataclass
 class Catalog:
-    version: UUID
     areas: list[UUID]
     courses: list[UUID]
     statements: list[UUID]
 
 
-def catalog(db, *, number=1, count=26, publish=True):
+def catalog(db, *, count=26):
     """Synthetic mappings: two tied areas, two recommendations and one lower course."""
-    quiz = Catalog(
-        uuid4(), [uuid4(), uuid4()], [uuid4() for _ in range(3)], [uuid4() for _ in range(count)]
-    )
-    db.execute(
-        insert(QuizVersion).values(
-            id=quiz.version,
-            event_name="Test event",
-            version_number=number,
-            psychology_destination="SPA",
-            psychology_instructions="Find the Psychology team",
-        )
-    )
+    # Synthetic content exists only in the disposable test schema.
+    for table in ("areas", "courses", "statements", "statement_course_weights"):
+        db.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER USER"))
+    for model in (StatementCourseWeight, Statement, Course, Area):
+        db.execute(delete(model))
+    quiz = Catalog([uuid4(), uuid4()], [uuid4() for _ in range(3)], [uuid4() for _ in range(count)])
     db.execute(
         insert(Area),
         [
             dict(
                 id=area,
-                quiz_version_id=quiz.version,
                 name=f"Area {i}",
                 destination="Space",
                 destination_instructions="Go to the indicated space",
@@ -58,7 +49,6 @@ def catalog(db, *, number=1, count=26, publish=True):
         [
             dict(
                 id=course,
-                quiz_version_id=quiz.version,
                 area_id=quiz.areas[0 if i < 2 else 1],
                 name=f"Course {i}",
             )
@@ -71,7 +61,6 @@ def catalog(db, *, number=1, count=26, publish=True):
             [
                 dict(
                     id=statement,
-                    quiz_version_id=quiz.version,
                     source_number=i,
                     display_order=i,
                     text=f"Statement {i}",
@@ -83,7 +72,6 @@ def catalog(db, *, number=1, count=26, publish=True):
             insert(StatementCourseWeight),
             [
                 dict(
-                    quiz_version_id=quiz.version,
                     statement_id=statement,
                     course_id=course,
                 )
@@ -93,15 +81,12 @@ def catalog(db, *, number=1, count=26, publish=True):
         )
         db.execute(
             insert(StatementCourseWeight).values(
-                quiz_version_id=quiz.version,
                 statement_id=quiz.statements[0],
                 course_id=quiz.courses[1],
             )
         )
-    if publish:
-        db.execute(
-            update(QuizVersion).where(QuizVersion.id == quiz.version).values(status="published")
-        )
+    for table in ("areas", "courses", "statements", "statement_course_weights"):
+        db.execute(text(f"ALTER TABLE {table} ENABLE TRIGGER USER"))
     return quiz
 
 
@@ -109,7 +94,6 @@ def participation(db, quiz):
     return db.scalar(
         insert(Participation)
         .values(
-            quiz_version_id=quiz.version,
             school_name="Test school",
             full_name="Test participant",
             phone="+5511999999999",
@@ -128,7 +112,6 @@ def selections(db, quiz, participant, *, count=25):
         [
             dict(
                 participation_id=participant,
-                quiz_version_id=quiz.version,
                 statement_id=statement,
             )
             for statement in quiz.statements[:count]
@@ -142,7 +125,6 @@ def results(db, quiz, participant):
         [
             dict(
                 participation_id=participant,
-                quiz_version_id=quiz.version,
                 area_id=area,
                 score=25,
                 is_winner=True,
@@ -155,7 +137,6 @@ def results(db, quiz, participant):
         [
             dict(
                 participation_id=participant,
-                quiz_version_id=quiz.version,
                 course_id=course,
                 score=1 if i == 1 else 25,
                 is_recommended=i != 1,

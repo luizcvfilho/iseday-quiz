@@ -1,9 +1,4 @@
-"""Pure scoring for a snapshot of one quiz version; no database writes or publication.
-
-The caller builds the snapshot from the participation's version, including every
-area, course and statement. UUID membership rejects unknown/other-version choices.
-Results include zero scores and use UUID order, never order as a tie breaker.
-"""
+"""Pure scoring for the fixed quiz catalog, preserving all ties and zero scores."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -14,7 +9,7 @@ REQUIRED_SELECTION_COUNT = 25
 
 
 class InvalidSelectionError(ValueError):
-    """The participant must supply exactly 25 unique statements from this version."""
+    """The participant must supply exactly 25 unique statements from the quiz."""
 
 
 class ScoringConfigurationError(ValueError):
@@ -41,7 +36,6 @@ class StatementDefinition:
 
 @dataclass(frozen=True)
 class ScoringCatalog:
-    quiz_version_id: UUID
     area_ids: tuple[UUID, ...]
     courses: tuple[CourseDefinition, ...]
     statements: tuple[StatementDefinition, ...]
@@ -64,7 +58,6 @@ class CourseScore:
 
 @dataclass(frozen=True)
 class QuizScore:
-    quiz_version_id: UUID
     areas: tuple[AreaScore, ...]
     courses: tuple[CourseScore, ...]
 
@@ -84,14 +77,14 @@ def _validate_catalog(catalog: ScoringCatalog) -> None:
     ):
         raise ScoringConfigurationError("Identificadores duplicados no catálogo.")
     if any(course.area_id not in areas for course in catalog.courses):
-        raise ScoringConfigurationError("Curso vinculado a uma área inexistente nesta versão.")
+        raise ScoringConfigurationError("Curso vinculado a uma área inexistente no quiz.")
     for statement in catalog.statements:
         if not statement.weights:
             raise ScoringConfigurationError("Afirmativa sem vínculo com curso.")
         linked_courses = set()
         for link in statement.weights:
             if link.course_id not in courses:
-                raise ScoringConfigurationError("Vínculo com curso inexistente nesta versão.")
+                raise ScoringConfigurationError("Vínculo com curso inexistente no quiz.")
             if link.course_id in linked_courses:
                 raise ScoringConfigurationError("Vínculo duplicado entre afirmativa e curso.")
             if type(link.weight) is not int or link.weight <= 0:
@@ -114,7 +107,7 @@ def calculate_scores(catalog: ScoringCatalog, selected_statement_ids: Sequence[U
     _validate_catalog(catalog)
     statements = {statement.id: statement for statement in catalog.statements}
     if not selected <= statements.keys():
-        raise InvalidSelectionError("Afirmativa inexistente ou de outra versão do quiz.")
+        raise InvalidSelectionError("Afirmativa inexistente no quiz.")
 
     courses = {course.id: course for course in catalog.courses}
     area_points = dict.fromkeys(catalog.area_ids, 0)
@@ -137,7 +130,6 @@ def calculate_scores(catalog: ScoringCatalog, selected_statement_ids: Sequence[U
         best_course_by_area[area_id] = max(best_course_by_area[area_id], score)
 
     return QuizScore(
-        quiz_version_id=catalog.quiz_version_id,
         areas=tuple(
             AreaScore(area_id, area_points[area_id], area_id in winners)
             for area_id in sorted(area_points)

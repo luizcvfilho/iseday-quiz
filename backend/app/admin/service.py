@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.admin.schemas import (
-    CatalogItem,
     CountItem,
     Filters,
     NamedItem,
@@ -18,8 +17,8 @@ from app.admin.schemas import (
     ParticipationRow,
     SchoolCount,
     Summary,
-    VersionItem,
 )
+from app.catalog import EVENT_NAME
 from app.models import (
     Area,
     Course,
@@ -28,7 +27,6 @@ from app.models import (
     ParticipationCourseResult,
     ParticipationFeedback,
     ParticipationSelection,
-    QuizVersion,
     Statement,
 )
 from app.participants.schemas import PublicStatement
@@ -41,7 +39,7 @@ def filtered_ids(filters: Filters):
     query = select(Participation.id)
     if filters.q.strip():
         query = query.where(Participation.full_name.icontains(filters.q.strip(), autoescape=True))
-    for field in ("school_name", "quiz_version_id", "status"):
+    for field in ("school_name", "status"):
         value = getattr(filters, field)
         if value is not None:
             query = query.where(getattr(Participation, field) == value)
@@ -90,15 +88,9 @@ def options(session: Session) -> Options:
                 select(Participation.school_name).distinct().order_by(Participation.school_name)
             )
         ),
-        versions=[
-            VersionItem(id=v.id, name=v.event_name, version_number=v.version_number)
-            for v in session.scalars(
-                select(QuizVersion).order_by(QuizVersion.version_number.desc())
-            )
-        ],
         **{
             key: [
-                CatalogItem(id=row.id, name=row.name, quiz_version_id=row.quiz_version_id)
+                NamedItem(id=row.id, name=row.name)
                 for row in session.scalars(select(model).order_by(model.name, model.id))
             ]
             for key, model in (("areas", Area), ("courses", Course))
@@ -108,8 +100,7 @@ def options(session: Session) -> Options:
 
 def rows(session: Session, query) -> list[ParticipationRow]:
     records = session.execute(
-        select(Participation, QuizVersion, ParticipationFeedback.agrees_with_result)
-        .join(QuizVersion, QuizVersion.id == Participation.quiz_version_id)
+        select(Participation, ParticipationFeedback.agrees_with_result)
         .outerjoin(
             ParticipationFeedback, ParticipationFeedback.participation_id == Participation.id
         )
@@ -135,8 +126,6 @@ def rows(session: Session, query) -> list[ParticipationRow]:
             id=p.id,
             full_name=p.full_name,
             school_name=p.school_name,
-            quiz_version_id=p.quiz_version_id,
-            version_number=version.version_number,
             status=p.status,
             started_at=p.started_at,
             submitted_at=p.submitted_at,
@@ -145,7 +134,7 @@ def rows(session: Session, query) -> list[ParticipationRow]:
             winning_areas=areas[p.id],
             recommended_courses=courses[p.id],
         )
-        for p, version, agreement in records
+        for p, agreement in records
     ]
 
 
@@ -165,7 +154,6 @@ def detail(session: Session, participation_id: UUID):
     if participant is None:
         raise HTTPException(404, "Participação não encontrada.")
     row = rows(session, select(Participation.id).where(Participation.id == participation_id))[0]
-    version = session.get(QuizVersion, participant.quiz_version_id)
     selections = session.scalars(
         select(Statement)
         .join(ParticipationSelection, ParticipationSelection.statement_id == Statement.id)
@@ -176,7 +164,7 @@ def detail(session: Session, participation_id: UUID):
         **row.model_dump(),
         email=participant.email,
         phone=participant.phone,
-        event_name=version.event_name,
+        event_name=EVENT_NAME,
         privacy_notice_version=participant.privacy_notice_version,
         selections=[
             PublicStatement(id=s.id, display_order=s.display_order, text=s.text) for s in selections
@@ -214,16 +202,13 @@ def summary(session: Session, filters: Filters):
         ("courses", ParticipationCourseResult, Course, "course_id", "is_recommended"),
     ):
         groups[name] = [
-            CountItem(id=id, name=label, count=count, version_number=version)
-            for id, label, version, count in session.execute(
-                select(
-                    entity.id, entity.name, QuizVersion.version_number, func.count().label("count")
-                )
+            CountItem(id=id, name=label, count=count)
+            for id, label, count in session.execute(
+                select(entity.id, entity.name, func.count().label("count"))
                 .select_from(entity)
                 .join(model, getattr(model, key) == entity.id)
-                .join(QuizVersion, QuizVersion.id == entity.quiz_version_id)
                 .where(model.participation_id.in_(select(ids.c.id)), getattr(model, flag).is_(True))
-                .group_by(entity.id, QuizVersion.version_number)
+                .group_by(entity.id)
                 .order_by(func.count().desc(), entity.name, entity.id)
             )
         ]

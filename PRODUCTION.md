@@ -43,7 +43,9 @@ make prod-admin
 docker compose --env-file .env.production -f compose.production.yaml exec api /app/.venv/bin/python -m app.admin reset-password
 ```
 
-Abra `https://SEU_DOMINIO/admin`. Crie uma versão do catálogo em **Versões e destinos**. Revise perguntas, pesos, destinos e instruções e publique a versão somente após validação institucional. Sem aviso configurado e versão publicada, o cadastro de alunos permanece indisponível. Migrações não publicam conteúdo nem criam usuários.
+Abra `https://SEU_DOMINIO/admin` para acompanhar as participações. O catálogo fixo de 74 afirmativas e 9 cursos é instalado automaticamente pelas migrações; não existe publicação de versões. O aviso institucional continua obrigatório. As migrações não criam usuários.
+
+A revisão `0003` remove as versões e todas as participações de teste existentes, preservando administradores e auditoria. Ela não tem downgrade: o retorno ao modelo anterior exige restauração de backup. Aplique-a com a API antiga parada e com os arquivos `0003_single_quiz.py`, `0003_single_quiz.sql` e `catalog/quiz-final.json` presentes na imagem.
 
 Verifique os endpoints no domínio publicado:
 
@@ -114,7 +116,7 @@ make check-production
 
 Em Linux sem as bibliotecas necessárias ao Chromium, use `npx playwright install --with-deps chromium` para preparar o navegador e suas dependências.
 
-O script cria um projeto exclusivo, senha aleatória, banco `iseday_production_test` e portas locais aleatórias. Não lê `.env.production`, não utiliza os volumes reais e não emite certificado público. O Caddy emite um certificado local para `localhost`; apenas o navegador desse teste ignora a confiança do certificado. O teste verifica o fluxo completo com banco real, cookies `Secure`/`HttpOnly`/`SameSite=Strict`, rotas diretas do React, cache de assets e respostas da API sem fallback HTML. Após reiniciar os containers, confere a persistência da participação concluída e da versão publicada; depois executa backup e restauração em outra base temporária. Os containers e volumes exclusivos do ensaio são removidos ao final.
+O script cria um projeto exclusivo, senha aleatória, banco `iseday_production_test` e portas locais aleatórias. Não lê `.env.production`, não utiliza os volumes reais e não emite certificado público. O Caddy emite um certificado local para `localhost`; apenas o navegador desse teste ignora a confiança do certificado. O teste verifica o fluxo completo com banco real, cookies `Secure`/`HttpOnly`/`SameSite=Strict`, rotas diretas do React, cache de assets e respostas da API sem fallback HTML. Após reiniciar os containers, confere a persistência da participação concluída e do catálogo fixo; depois executa backup e restauração em outra base temporária. Os containers e volumes exclusivos do ensaio são removidos ao final.
 
 Para um ensaio manual separado, preencha outro arquivo de ambiente com dados fictícios, use `SITE_ADDRESS=localhost`, `HTTP_BIND_ADDRESS=127.0.0.1`, `HTTP_PORT=8080` e `HTTPS_PORT=8443`, e atribua outro nome de projeto:
 
