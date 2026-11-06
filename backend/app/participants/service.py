@@ -213,7 +213,13 @@ def saved_result(session: Session, participant: Participation) -> ParticipationR
             )
         ),
         areas=[
-            AreaResult(id=a.id, name=a.name, score=r.score, is_winner=r.is_winner)
+            AreaResult(
+                id=a.id,
+                name=a.name,
+                destination=a.destination,
+                score=r.score,
+                is_winner=r.is_winner,
+            )
             for a, r in area_rows
         ],
         courses=[

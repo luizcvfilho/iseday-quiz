@@ -13,7 +13,13 @@ export type Participant = {
   status: 'draft' | 'submitted' | 'completed'
   access_expires_at: string
 }
-export type Area = { id: string; name: string; score: number; is_winner: boolean }
+export type Area = {
+  id: string
+  name: string
+  destination: string
+  score: number
+  is_winner: boolean
+}
 export type Course = {
   id: string
   area_id: string

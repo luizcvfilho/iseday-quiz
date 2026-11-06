@@ -202,6 +202,9 @@ def test_submit_persists_complete_results_and_replays_identical_choices(api, mon
     assert body["status"] == "submitted"
     assert counts(api) == [25, 2, 3]
     assert all(area["is_winner"] and area["score"] == 25 for area in body["areas"])
+    assert {area["id"]: area["destination"] for area in body["areas"]} == {
+        str(area_id): "Space" for area_id in api.quiz.areas
+    }
     assert {c["name"]: (c["score"], c["is_recommended"]) for c in body["courses"]} == {
         "Course 0": (25, True),
         "Course 1": (1, False),

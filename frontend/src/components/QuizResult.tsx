@@ -1,8 +1,5 @@
 import { useState } from 'react'
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -21,7 +18,6 @@ import {
   Typography,
 } from '@mui/material'
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded'
-import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded'
 import NorthEastRounded from '@mui/icons-material/NorthEastRounded'
 import type { Feedback, Result } from '../api'
 import { brand } from '../theme'
@@ -59,7 +55,7 @@ export function QuizResult({
         }
       >
         Suas escolhas apontam afinidade com {winners.length === 1 ? 'esta área' : 'estas áreas'}.
-        Conheça os cursos que se destacaram em cada uma.
+        Conheça os cursos que se destacaram em cada uma e os espaços de vivência no campus.
       </SectionHeading>
       <Box
         sx={{
@@ -106,6 +102,14 @@ export function QuizResult({
                     </ListItem>
                   ))}
               </List>
+              <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #ffffff40' }}>
+                <Typography component="h3" variant="caption" sx={{ color: '#dceefa' }}>
+                  Espaços de vivência
+                </Typography>
+                <Typography sx={{ mt: 1, overflowWrap: 'anywhere' }}>
+                  {area.destination}
+                </Typography>
+              </Box>
             </CardContent>
           </Card>
         ))}
@@ -114,49 +118,6 @@ export function QuizResult({
         Um ponto de partida para conhecer possibilidades. Seus interesses podem mudar, e a escolha
         do seu caminho continua sendo sua.
       </Typography>
-      <Accordion
-        elevation={0}
-        disableGutters
-        sx={{
-          mb: 4,
-          border: 1,
-          borderColor: 'divider',
-          borderRadius: '14px !important',
-          '&::before': { display: 'none' },
-        }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreRounded />}>
-          <Typography variant="body2" color="primary">
-            Ver pontuação por área
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          <List disablePadding sx={{ maxWidth: 600 }}>
-            {result.areas.map((a) => (
-              <ListItem
-                key={a.id}
-                sx={{
-                  px: 0,
-                  borderBottom: 1,
-                  borderColor: 'divider',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 2,
-                }}
-              >
-                <Typography variant="body2">{a.name}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
-                  {a.score} {a.score === 1 ? 'ponto' : 'pontos'}
-                </Typography>
-              </ListItem>
-            ))}
-          </List>
-          <Typography variant="caption" component="p" color="textSecondary" sx={{ mt: 2 }}>
-            Os pontos representam suas escolhas neste quiz, sem indicar um percentual de
-            compatibilidade. Todos os empates são preservados.
-          </Typography>
-        </AccordionDetails>
-      </Accordion>
       <Paper
         component="form"
         variant="outlined"

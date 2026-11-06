@@ -71,8 +71,20 @@ async function mockApi(page: Page) {
         submitted_at: new Date().toISOString(),
         statement_ids: ids,
         areas: [
-          { id: 'a1', name: 'Saúde', score: 17, is_winner: true },
-          { id: 'a2', name: 'Engenharia', score: 17, is_winner: true },
+          {
+            id: 'a1',
+            name: 'Saúde',
+            destination: 'CEMA, SPA, Anatômico e complexo esportivo',
+            score: 17,
+            is_winner: true,
+          },
+          {
+            id: 'a2',
+            name: 'Engenharia',
+            destination: 'Laboratório de práticas tecnológicas e engenharia',
+            score: 17,
+            is_winner: true,
+          },
         ],
         courses: [
           { id: 'c1', area_id: 'a1', name: 'Enfermagem', score: 12, is_recommended: true },
@@ -166,6 +178,19 @@ test('cadastro, limite, edição, empates e confirmação preservam o encaminham
   await page.getByRole('button', { name: 'Confirmar 25 escolhas' }).click()
   await expect(page.getByRole('heading', { name: 'Saúde', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Engenharia', exact: true })).toBeVisible()
+  const healthCard = page.getByRole('article').filter({
+    has: page.getByRole('heading', { name: 'Saúde', exact: true }),
+  })
+  const engineeringCard = page.getByRole('article').filter({
+    has: page.getByRole('heading', { name: 'Engenharia', exact: true }),
+  })
+  await expect(healthCard.getByText('CEMA, SPA, Anatômico e complexo esportivo')).toBeVisible()
+  await expect(
+    engineeringCard.getByText('Laboratório de práticas tecnológicas e engenharia'),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Espaços de vivência' })).toHaveCount(2)
+  await expect(page.getByText('Ver pontuação por área')).toHaveCount(0)
+  await expect(page.getByText(/\d+ pontos?/)).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Ver meu encaminhamento' })).toBeDisabled()
   await page.getByRole('radio', { name: 'Sim, faz sentido' }).check()
   await expect(page.getByRole('button', { name: 'Ver meu encaminhamento' })).toBeDisabled()
@@ -342,6 +367,9 @@ test('layout móvel permite chegar ao encaminhamento sem rolagem horizontal', as
   await register(page)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await selectAndSubmit(page)
+  await expect(page.getByText('CEMA, SPA, Anatômico e complexo esportivo')).toBeVisible()
+  await expect(page.getByText('Laboratório de práticas tecnológicas e engenharia')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.getByRole('radio', { name: 'Não me identifiquei' }).check()
   await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
   await expect(page.getByRole('heading', { name: 'SPA', exact: true })).toBeVisible()

@@ -88,6 +88,7 @@ class ParticipationSession(BaseModel):
 class AreaResult(BaseModel):
     id: UUID
     name: str
+    destination: str
     score: int
     is_winner: bool
 
