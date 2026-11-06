@@ -15,7 +15,6 @@ import {
   Typography,
 } from '@mui/material'
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded'
-import PrivacyTipOutlined from '@mui/icons-material/PrivacyTipOutlined'
 import { api, errorMessage, normalizePhone } from '../api'
 import type { CurrentQuiz, ParticipationContacts, ParticipationMatch, Registration } from '../api'
 import { brand } from '../theme'
@@ -298,20 +297,6 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit, onResume 
               </Alert>
             )}
             {lookupError && <Alert severity="error">{lookupError}</Alert>}
-            <Alert
-              severity="info"
-              role="note"
-              aria-label="Uso dos seus dados"
-              icon={<PrivacyTipOutlined fontSize="small" />}
-              sx={{ bgcolor: brand.paleBlue }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                Sobre seus dados
-              </Typography>
-              <Typography variant="caption" component="p" sx={{ m: 0, whiteSpace: 'pre-line' }}>
-                {quiz.privacy_notice_text}
-              </Typography>
-            </Alert>
             <Button
               variant="contained"
               type="submit"
