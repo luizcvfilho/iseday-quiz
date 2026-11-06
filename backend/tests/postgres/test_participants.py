@@ -157,6 +157,121 @@ def test_production_uses_secure_host_cookie(api):
         assert client.post("/api/participations/me/end", headers=WRITE).status_code == 204
 
 
+@pytest.mark.parametrize("status", ["draft", "submitted", "completed"])
+@pytest.mark.parametrize("contact", ["email", "phone", "both"])
+def test_lookup_recognizes_contacts_without_starting_a_session_or_exposing_data(
+    api, status, contact
+):
+    register(api)
+    if status != "draft":
+        submit(api)
+    if status == "completed":
+        confirm(api)
+    contacts = {
+        key: value
+        for key, value in api.payload.items()
+        if key in ({"email", "phone"} if contact == "both" else {contact})
+    }
+    if "email" in contacts:
+        contacts["email"] = contacts["email"].upper()
+    with TestClient(api.app) as other:
+        response = other.post("/api/participations/lookup", headers=WRITE, json=contacts)
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": status,
+            "matched_by": [key for key in ("email", "phone") if key in contacts],
+        }
+        assert "set-cookie" not in response.headers
+        assert response.headers["cache-control"] == "no-store"
+        assert other.get("/api/participations/me").status_code == 401
+
+
+@pytest.mark.parametrize("status", ["draft", "submitted", "completed"])
+@pytest.mark.parametrize("contact", ["email", "phone"])
+def test_contact_recovery_renews_session_and_preserves_participation(api, status, contact):
+    first = register(api).json()
+    saved = submit(api).json() if status != "draft" else None
+    if status == "completed":
+        confirm(api, agrees=False)
+        saved = api.client.get("/api/participations/me/result").json()
+    old_token = api.client.cookies.get("iseday_participant")
+    # Recovery must also work after expiration, without the original cookie.
+    with api.engine.begin() as db:
+        db.execute(
+            update(Participation)
+            .where(Participation.id == UUID(first["id"]))
+            .values(access_expires_at=Participation.started_at + timedelta(microseconds=1))
+        )
+    with TestClient(api.app) as other:
+        response = other.post(
+            "/api/participations/resume", headers=WRITE, json={contact: api.payload[contact]}
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["id"] == first["id"] and body["status"] == status
+        assert body["access_expires_at"] > first["access_expires_at"]
+        assert other.cookies.get("iseday_participant") != old_token
+        assert "HttpOnly" in response.headers["set-cookie"]
+        assert "SameSite=strict" in response.headers["set-cookie"]
+        assert other.get("/api/participations/me").json() == body
+        if saved:
+            assert other.get("/api/participations/me/result").json() == saved
+        else:
+            assert other.get("/api/participations/me/quiz").status_code == 200
+    assert api.client.get("/api/participations/me").status_code == 401
+    with api.engine.connect() as db:
+        assert db.scalar(select(func.count()).select_from(Participation)) == 1
+
+
+def test_contact_recognition_requires_explicit_choice_to_create_a_new_test(api):
+    first = register(api).json()
+    saved = submit(api).json()
+    with TestClient(api.app) as other:
+        assert register(api, other).status_code == 409
+        assert other.get("/api/participations/me").status_code == 401
+        new = register(api, other, start_new=True)
+        assert new.status_code == 201
+        assert new.json()["id"] != first["id"] and new.json()["status"] == "draft"
+        assert register(api, other, start_new=True).json() == new.json()
+        other.post("/api/participations/me/end", headers=WRITE)
+        recovered = other.post(
+            "/api/participations/resume", headers=WRITE, json={"email": api.payload["email"]}
+        )
+        assert recovered.json()["id"] == new.json()["id"]
+    assert api.client.get("/api/participations/me/result").json() == saved
+    with api.engine.connect() as db:
+        assert db.scalar(select(func.count()).select_from(Participation)) == 2
+
+
+@pytest.mark.parametrize("path", ["lookup", "resume"])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"email": "invalid"},
+        {"phone": "11999999999"},
+        {"email": "student@example.org", "participation_id": str(uuid4())},
+    ],
+)
+def test_contact_routes_reject_invalid_inputs_and_identifiers(api, path, payload):
+    response = api.client.post(f"/api/participations/{path}", headers=WRITE, json=payload)
+    assert response.status_code == 422
+
+
+def test_unknown_contacts_do_not_create_sessions_and_lookup_is_rate_limited(api):
+    contacts = {"email": "unknown@example.org"}
+    response = api.client.post("/api/participations/lookup", headers=WRITE, json=contacts)
+    assert response.status_code == 200 and response.json() is None
+    assert (
+        api.client.post("/api/participations/resume", headers=WRITE, json=contacts).status_code
+        == 404
+    )
+    assert api.client.get("/api/participations/me").status_code == 401
+    api.settings.participant_registration_limit = 1
+    response = api.client.post("/api/participations/lookup", headers=WRITE, json=contacts)
+    assert response.status_code == 429 and "retry-after" in response.headers
+
+
 @pytest.mark.parametrize(
     ("field", "value", "status"),
     [
@@ -266,7 +381,7 @@ def test_sessions_isolate_participants_and_ids_are_not_credentials(api):
         other.cookies.set("iseday_participant", first["id"])
         assert other.get("/api/participations/me/result").status_code == 401
         other.cookies.clear()
-        second = register(api, other).json()
+        second = register(api, other, start_new=True).json()
         assert second["id"] != first["id"]
         assert other.get("/api/participations/me/result").status_code == 409
         own = submit(api, other, ids=api.quiz.statements[1:]).json()
@@ -287,7 +402,7 @@ def test_expiry_revocation_and_idempotent_end_preserve_history(api):
     api.client.cookies.set("iseday_participant", token)
     assert api.client.get("/api/participations/me/result").status_code == 401
     assert counts(api) == [25, 2, 3]
-    second = register(api).json()
+    second = register(api, start_new=True).json()
     with api.engine.begin() as db:
         db.execute(
             update(Participation)
@@ -618,7 +733,7 @@ def test_feedback_is_private_and_end_keeps_completed_history(api):
     first = confirm(api, course=api.quiz.courses[0]).json()
     with TestClient(api.app) as other:
         assert confirm(api, agrees=False, client=other).status_code == 401
-        second = register(api, other).json()
+        second = register(api, other, start_new=True).json()
         submit(api, other)
         assert (
             confirm(api, agrees=False, client=other, participation_id=registered["id"]).status_code

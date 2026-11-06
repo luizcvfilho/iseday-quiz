@@ -49,6 +49,12 @@ export type Registration = {
   phone: string
   email: string
   privacy_notice_version: string
+  start_new?: boolean
+}
+export type ParticipationContacts = { email?: string; phone?: string }
+export type ParticipationMatch = {
+  status: Participant['status']
+  matched_by: ('email' | 'phone')[]
 }
 
 export class ApiError extends Error {
@@ -106,6 +112,10 @@ export const api = {
   me: () => request<Participant>('/participations/me'),
   quiz: () => request<Quiz>('/participations/me/quiz'),
   register: (data: Registration) => request<Participant>('/participations', data),
+  lookup: (data: ParticipationContacts) =>
+    request<ParticipationMatch | null>('/participations/lookup', data),
+  resume: (data: ParticipationContacts) => request<Participant>('/participations/resume', data),
+  end: () => request<void>('/participations/me/end', {}),
   submit: (ids: string[]) => request<Result>('/participations/me/submit', { statement_ids: ids }),
   result: () => request<Result>('/participations/me/result'),
   feedback: (data: Feedback) => request<Referral>('/participations/me/feedback', data),

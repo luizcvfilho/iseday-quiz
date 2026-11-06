@@ -47,6 +47,8 @@ def test_token_is_hashed_and_distinct():
     "path",
     [
         "/participations",
+        "/participations/lookup",
+        "/participations/resume",
         "/participations/me/submit",
         "/participations/me/feedback",
         "/participations/me/end",

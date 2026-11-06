@@ -4,6 +4,7 @@ import type {
   CurrentQuiz,
   Feedback,
   Participant,
+  ParticipationContacts,
   Quiz,
   Referral,
   Registration,
@@ -12,7 +13,7 @@ import type {
 import { RegistrationForm } from './components/RegistrationForm'
 import { QuizSelection } from './components/QuizSelection'
 import { QuizResult } from './components/QuizResult'
-import { Alert, AlertTitle, Box, Button, Paper, Typography } from '@mui/material'
+import { Alert, AlertTitle, Box, Button, Paper, Stack, Typography } from '@mui/material'
 import NorthEastRounded from '@mui/icons-material/NorthEastRounded'
 import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded'
 import { FlowLayout } from './components/FlowLayout'
@@ -221,6 +222,53 @@ export function QuizFlow() {
     }
   }
 
+  async function startNewTest() {
+    const id = begin()
+    if (id === null) return
+    try {
+      const content = await api.current()
+      await api.end()
+      if (id !== epoch.current) return
+      clearPrivate()
+      setCurrent(content)
+      setScreen('registration')
+    } catch (error) {
+      if (id === epoch.current) setError(errorMessage(error))
+    } finally {
+      finish(id)
+    }
+  }
+
+  async function recover(contacts: ParticipationContacts) {
+    const id = begin()
+    if (id === null) return
+    try {
+      const session = await api.resume(contacts)
+      if (id !== epoch.current) return
+      // Save the recovered session before fetching its content so a failed read can be retried.
+      setParticipant(session)
+      setCurrent(null)
+      setScreen('resume')
+      if (session.status === 'draft') {
+        const content = await api.quiz()
+        if (id !== epoch.current) return
+        setQuiz(content)
+        setSelected([])
+        setScreen('quiz')
+      } else {
+        const saved = await api.result()
+        if (id === epoch.current) showResult(saved)
+      }
+    } catch (error) {
+      if (id === epoch.current) {
+        if (error instanceof ApiError && error.status === 401) expire()
+        else setError(errorMessage(error))
+      }
+    } finally {
+      finish(id)
+    }
+  }
+
   async function reconcile(error: unknown, id: number) {
     if (id !== epoch.current) return
     if (error instanceof ApiError && error.status === 401) {
@@ -328,6 +376,7 @@ export function QuizFlow() {
             busy={busy}
             serverFields={fields}
             onSubmit={(data) => void register(data)}
+            onResume={(contacts) => void recover(contacts)}
           />
         )}
         {screen === 'resume' && (
@@ -335,14 +384,23 @@ export function QuizFlow() {
             tag="BEM-VINDO DE VOLTA"
             title="Continue sua participação."
             actions={
-              <Button
-                variant="contained"
-                disabled={busy}
-                loading={busy}
-                onClick={() => void resume()}
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                sx={{ justifyContent: 'center' }}
               >
-                {busy ? 'Recuperando…' : 'Continuar minha participação'}
-              </Button>
+                <Button
+                  variant="contained"
+                  disabled={busy}
+                  loading={busy}
+                  onClick={() => void resume()}
+                >
+                  {busy ? 'Recuperando…' : 'Continuar minha participação'}
+                </Button>
+                <Button variant="outlined" disabled={busy} onClick={() => void startNewTest()}>
+                  Fazer novo teste
+                </Button>
+              </Stack>
             }
           >
             Retome seu quiz ou consulte seu resultado e encaminhamento.

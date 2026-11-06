@@ -197,6 +197,8 @@ A escola é um campo de texto obrigatório: o participante digita o nome livreme
 
 Contatos e marcações ficam apenas na memória da página, sem `localStorage` ou `sessionStorage`. Os contatos saem da tela após iniciar o quiz. Marcações ainda não enviadas se perdem ao recarregar; há aviso ao tentar sair com escolhas e informação explícita na retomada do rascunho. Uma sessão existente permite retomar a própria participação e consultar o resultado e o encaminhamento. A retomada usa o mesmo catálogo fixo de todas as participações.
 
+Na tela inicial de retomada, **Fazer novo teste** encerra a sessão atual e abre um cadastro vazio, preservando a participação anterior. No cadastro, o e-mail e o telefone são consultados ao sair dos campos e novamente antes do envio. Se algum deles já foi utilizado, a interface informa se a participação está em andamento ou concluída e pergunta se o aluno quer continuar ou fazer um novo teste. A retomada busca a participação mais recente que corresponda a pelo menos um dos contatos, sem diferenciar maiúsculas e minúsculas no e-mail. O aluno recebe uma nova sessão; contatos, escolhas e resultados anteriores permanecem salvos. Rascunhos retomam a tela do quiz, resultados submetidos retomam a confirmação e participações concluídas retomam o encaminhamento.
+
 Se a resposta de um envio se perder, a interface consulta o resultado salvo. Se também não conseguir confirmar essa consulta, mantém as escolhas e bloqueia sua edição até recuperar a resposta ou repetir o mesmo envio. Confirmações usam a mesma regra.
 
 ### Testes da interface
@@ -264,6 +266,8 @@ Configure `PRIVACY_NOTICE_VERSION` e `PRIVACY_NOTICE_TEXT` no `.env`. O exemplo 
 |---|---|
 | `GET /api/quiz/current` | Quiz único, aviso e afirmativas ordenadas, sem vínculos ou pesos. |
 | `POST /api/participations` | Cadastro validado, participação em rascunho e cookie temporário. |
+| `POST /api/participations/lookup` | Reconhece o e-mail ou telefone e informa o estado da participação mais recente, sem iniciar sessão. |
+| `POST /api/participations/resume` | Retoma a participação reconhecida pelos contatos e renova a sessão. |
 | `GET /api/participations/me` | Identificador, estado e expiração da própria sessão, sem contatos. |
 | `GET /api/participations/me/quiz` | Afirmativas do quiz único para a sessão autenticada, sem vínculos ou pesos. |
 | `POST /api/participations/me/submit` | Valida 25 escolhas, calcula e grava escolhas/resultados na mesma transação. |
@@ -289,7 +293,9 @@ O cadastro retorna 201 com metadados da participação. O cookie é `HttpOnly`, 
 
 O envio recebe `{"statement_ids": ["uuid-1", "uuid-2", "..."]}`, com exatamente 25 UUIDs únicos do catálogo fixo. A API bloqueia a participação até o fim da transação. O mesmo conjunto de escolhas, em qualquer ordem, retorna o resultado salvo sem recalcular; outro conjunto após submissão retorna 409. Qualquer falha durante a gravação desfaz escolhas, pontuações e mudança de estado.
 
-Repetir um cadastro idêntico com o cookie válido retorna 200 e a mesma participação. Dados diferentes na mesma sessão retornam 409 com orientação para retomar a participação existente. Sem cookie não há deduplicação automática por contato. Uma sessão ausente, expirada ou revogada recebe 401; resultado ainda não submetido recebe 409. O encerramento é idempotente e retorna 204 mesmo sem sessão válida. A resposta de resultado inclui escolhas, pontuações e indicadores, sem contatos, pesos ou percentuais.
+Repetir um cadastro idêntico com o cookie válido retorna 200 e a mesma participação. Dados diferentes na mesma sessão retornam 409 com orientação para retomar a participação existente. Sem sessão válida, contatos já utilizados retornam 409 até o aluno escolher retomar ou enviar `start_new: true` para criar outro teste. Uma sessão ausente, expirada ou revogada recebe 401; resultado ainda não submetido recebe 409. O encerramento é idempotente e retorna 204 mesmo sem sessão válida. A resposta de resultado inclui escolhas, pontuações e indicadores, sem contatos, pesos ou percentuais.
+
+`POST /api/participations/lookup` recebe `email`, `phone` ou ambos e retorna `null` quando não há correspondência. Quando encontra uma participação, retorna apenas `status` e `matched_by` (quais dos contatos informados corresponderam), sem nomes, contatos salvos, identificadores ou resultados. A consulta não cria sessão. `POST /api/participations/resume` recebe os mesmos contatos, retoma a participação mais recente correspondente e retorna seus metadados com um novo cookie de sessão. A retomada funciona após expiração ou encerramento da sessão anterior, renova sua validade e invalida o token anterior dessa participação. As duas operações exigem `X-Quiz-Request: 1` e têm limites por IP em janelas independentes de 60 segundos, usando `PARTICIPANT_REGISTRATION_LIMIT`.
 
 Para confirmar, envie apenas `{"agrees_with_result": true}`. O aluno não precisa escolher um curso: o encaminhamento indica o estande do curso sugerido pelo quiz, no ginásio. Em caso de empate, inclui os estandes de todos os cursos sugeridos.
 

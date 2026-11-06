@@ -6,7 +6,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, or_, select
 from sqlalchemy.orm import Session
 
 from app.catalog import EVENT_NAME, PSYCHOLOGY_DESTINATION, PSYCHOLOGY_INSTRUCTIONS
@@ -28,6 +28,8 @@ from app.participants.schemas import (
     CurrentQuiz,
     Feedback,
     FeedbackResult,
+    ParticipationContacts,
+    ParticipationMatch,
     ParticipationResult,
     ParticipationSession,
     PublicStatement,
@@ -108,25 +110,83 @@ def session_summary(participant: Participation) -> ParticipationSession:
     )
 
 
+def find_by_contacts(
+    session: Session, contacts: ParticipationContacts, *, lock: bool = False
+) -> Participation | None:
+    conditions = []
+    if contacts.email is not None:
+        conditions.append(func.lower(Participation.email) == str(contacts.email).lower())
+    if contacts.phone is not None:
+        conditions.append(Participation.phone == contacts.phone)
+    query = (
+        select(Participation)
+        .where(or_(*conditions))
+        .order_by(Participation.started_at.desc(), Participation.id.desc())
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
+    if lock:
+        query = query.with_for_update()
+    return session.scalar(query)
+
+
+def lookup_participation(
+    session: Session, contacts: ParticipationContacts
+) -> ParticipationMatch | None:
+    participant = find_by_contacts(session, contacts)
+    if participant is None:
+        return None
+    matched_by = []
+    if contacts.email is not None and participant.email.lower() == str(contacts.email).lower():
+        matched_by.append("email")
+    if contacts.phone is not None and participant.phone == contacts.phone:
+        matched_by.append("phone")
+    return ParticipationMatch(status=participant.status, matched_by=matched_by)
+
+
+def resume_by_contacts(
+    session: Session, contacts: ParticipationContacts, settings: Settings
+) -> tuple[ParticipationSession, str]:
+    participant = find_by_contacts(session, contacts, lock=True)
+    if participant is None:
+        raise HTTPException(404, "Não encontramos uma participação com esses contatos.")
+    token = secrets.token_urlsafe(32)
+    participant.access_token_hash = token_hash(token)
+    participant.access_expires_at = session.scalar(select(func.clock_timestamp())) + timedelta(
+        minutes=settings.participant_session_minutes
+    )
+    session.flush()
+    return session_summary(participant), token
+
+
 def register(
     session: Session, data: Registration, settings: Settings, existing_token: str | None
 ) -> tuple[ParticipationSession, str, bool]:
     require_notice(settings)
     if data.privacy_notice_version != settings.privacy_notice_version:
         raise HTTPException(409, "O aviso de uso dos dados mudou. Atualize o cadastro.")
+    values = data.model_dump(exclude={"start_new"})
     existing = find_participation(session, existing_token)
     if existing and existing.access_expires_at > session.scalar(select(func.clock_timestamp())):
-        if any(getattr(existing, key) != value for key, value in data.model_dump().items()):
+        if any(getattr(existing, key) != value for key, value in values.items()):
             raise HTTPException(
                 409, "Já existe uma participação em andamento. Atualize a página para retomá-la."
             )
         return session_summary(existing), existing_token, False
 
+    if not data.start_new and find_by_contacts(
+        session, ParticipationContacts(email=data.email, phone=data.phone)
+    ):
+        raise HTTPException(
+            409,
+            "Este e-mail ou telefone já foi utilizado. Escolha continuar a participação "
+            "ou fazer um novo teste.",
+        )
     quiz_content(session)
     now = session.scalar(select(func.clock_timestamp()))
     token = secrets.token_urlsafe(32)
     participant = Participation(
-        **data.model_dump(),
+        **values,
         status="draft",
         started_at=now,
         access_token_hash=token_hash(token),

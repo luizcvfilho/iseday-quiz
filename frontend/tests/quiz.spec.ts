@@ -16,6 +16,7 @@ const quiz = {
 
 async function mockApi(page: Page) {
   const state = {
+    knownSession: null as null | { id: string; status: string; access_expires_at: string },
     session: null as null | {
       id: string
       status: string
@@ -31,6 +32,9 @@ async function mockApi(page: Page) {
     rejectFeedback: false,
     failRead: false,
     failCurrent: false,
+    failLookup: false,
+    lookups: 0,
+    resumptions: 0,
   }
   await page.route('**/api/**', async (route) => {
     const request = route.request()
@@ -43,16 +47,34 @@ async function mockApi(page: Page) {
     if (path === '/api/participations/me')
       return state.session ? reply(200, state.session) : reply(401, { detail: 'Sessão ausente.' })
     if (path === '/api/participations/me/quiz') return reply(200, quiz)
+    if (path === '/api/participations/lookup') {
+      state.lookups++
+      if (state.failLookup) return reply(503, { detail: 'Não foi possível verificar a participação.' })
+      const contacts = request.postDataJSON()
+      const matched_by = []
+      if (contacts.email?.toLowerCase() === 'aluno@example.org') matched_by.push('email')
+      if (contacts.phone === '+5511999999999') matched_by.push('phone')
+      return reply(200, state.knownSession && matched_by.length
+        ? { status: state.knownSession.status, matched_by }
+        : null)
+    }
+    if (path === '/api/participations/resume') {
+      state.resumptions++
+      state.session = state.knownSession
+      return state.session ? reply(200, state.session) : reply(404, { detail: 'Participação não encontrada.' })
+    }
     if (path === '/api/participations') {
       state.registrations++
       expect(request.postDataJSON().phone).toBe('+5511999999999')
       expect(request.postDataJSON().school_name).toBe('Escola de teste')
       expect(request.postDataJSON()).not.toHaveProperty('school_id')
       state.session = {
-        id: 'participant-1',
+        id: `participant-${state.registrations}`,
         status: 'draft',
         access_expires_at: new Date(Date.now() + 3600_000).toISOString(),
       }
+      state.knownSession = state.session
+      state.saved = null
       return reply(201, state.session)
     }
     if (path === '/api/participations/me/submit') {
@@ -142,12 +164,16 @@ async function mockApi(page: Page) {
   return state
 }
 
-async function register(page: Page) {
-  await page.goto('/')
+async function fillRegistration(page: Page) {
   await page.getByLabel('Nome completo').fill('Aluno de teste')
   await page.getByRole('textbox', { name: /^Escola/ }).fill('Escola de teste')
   await page.getByLabel('Telefone com DDD').fill('(11) 99999-9999')
   await page.getByRole('textbox', { name: /^E-mail/ }).fill('aluno@example.org')
+}
+
+async function register(page: Page) {
+  await page.goto('/')
+  await fillRegistration(page)
   await page.getByRole('button', { name: 'Começar meu quiz' }).click()
   await expect(page.getByRole('heading', { name: 'O que combina com você?' })).toBeVisible()
 }
@@ -311,6 +337,71 @@ test('cadastro permanece preenchido após mais de cinco minutos sem interação'
   await page.clock.fastForward(120_000)
   await expect(page.getByLabel('Nome completo')).toHaveValue('Contato temporário')
   expect(state.ends).toBe(0)
+})
+
+test('tela inicial permite fazer outro teste e reconhecer os contatos do anterior', async ({ page }) => {
+  const state = await mockApi(page)
+  await register(page)
+  await page.reload()
+  await page.getByRole('button', { name: 'Fazer novo teste', exact: true }).click()
+  await expect(page.getByLabel('Nome completo')).toHaveValue('')
+  expect(state.ends).toBe(1)
+  await fillRegistration(page)
+  await page.getByRole('textbox', { name: /^E-mail/ }).blur()
+  await expect(page.getByRole('alert').filter({ hasText: /já foram utilizados/ })).toContainText('em andamento')
+  await page.getByRole('button', { name: 'Começar meu quiz' }).click()
+  const prompt = page.getByRole('dialog')
+  await expect(prompt).toContainText('Deseja continuar de onde parou?')
+  expect(state.registrations).toBe(1)
+  await prompt.getByRole('button', { name: 'Fazer novo teste' }).click()
+  await expect(page.getByRole('heading', { name: 'O que combina com você?' })).toBeVisible()
+  expect(state.registrations).toBe(2)
+  expect(state.session!.id).toBe('participant-2')
+})
+
+for (const contact of ['email', 'phone']) {
+  test(`cadastro reconhece participação concluída pelo ${contact} e recupera o encaminhamento`, async ({ page }) => {
+    const state = await mockApi(page)
+    await register(page)
+    await selectAndSubmit(page)
+    await page.getByRole('radio', { name: 'Não concordo' }).check()
+    await page.getByRole('button', { name: 'Ver meu encaminhamento' }).click()
+    state.session = null
+    await page.reload()
+    await fillRegistration(page)
+    if (contact === 'email') await page.getByLabel('Telefone com DDD').fill('(21) 98888-8888')
+    else await page.getByRole('textbox', { name: /^E-mail/ }).fill('outro@example.org')
+    await page.getByRole('button', { name: 'Começar meu quiz' }).click()
+    const prompt = page.getByRole('dialog')
+    await expect(prompt).toContainText(contact === 'email' ? 'Este e-mail já foi utilizado' : 'Este telefone já foi utilizado')
+    await expect(prompt).toContainText('já concluída')
+    await prompt.getByRole('button', { name: 'Continuar participação', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Estande de Psicologia — Ginásio', exact: true })).toBeVisible()
+    expect(state.resumptions).toBe(1)
+    expect(state.registrations).toBe(1)
+    expect(state.submissions).toBe(1)
+  })
+}
+
+test('cadastro permite recusar a retomada e preserva os dados quando a consulta falha', async ({ page }) => {
+  const state = await mockApi(page)
+  await register(page)
+  state.session = null
+  await page.reload()
+  await fillRegistration(page)
+  await page.getByRole('button', { name: 'Começar meu quiz' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Voltar ao cadastro' }).click()
+  await expect(page.getByLabel('Nome completo')).toHaveValue('Aluno de teste')
+  expect(state.registrations).toBe(1)
+  state.failLookup = true
+  await page.getByRole('button', { name: 'Começar meu quiz' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível verificar' })).toBeVisible()
+  expect(state.registrations).toBe(1)
+  state.failLookup = false
+  await page.getByRole('button', { name: 'Começar meu quiz' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Continuar participação', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'O que combina com você?' })).toBeVisible()
+  expect(state.resumptions).toBe(1)
 })
 
 test('escolhas, resultado e encaminhamento permanecem após pausas sem interação', async ({ page }) => {

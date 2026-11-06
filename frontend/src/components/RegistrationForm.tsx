@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   Alert,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Paper,
   Stack,
   TextField,
@@ -11,8 +16,8 @@ import {
 } from '@mui/material'
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded'
 import PrivacyTipOutlined from '@mui/icons-material/PrivacyTipOutlined'
-import { normalizePhone } from '../api'
-import type { CurrentQuiz, Registration } from '../api'
+import { api, errorMessage, normalizePhone } from '../api'
+import type { CurrentQuiz, ParticipationContacts, ParticipationMatch, Registration } from '../api'
 import { brand } from '../theme'
 import { SectionHeading } from './Presentation'
 
@@ -21,15 +26,52 @@ type Props = {
   busy: boolean
   serverFields: string[]
   onSubmit: (data: Registration) => void
+  onResume: (contacts: ParticipationContacts) => void
 }
 
-export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) {
+export function RegistrationForm({ quiz, busy, serverFields, onSubmit, onResume }: Props) {
   const [schoolName, setSchoolName] = useState('')
   const [phoneError, setPhoneError] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [match, setMatch] = useState<ParticipationMatch | null>(null)
+  const [prompt, setPrompt] = useState<Registration | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [lookupError, setLookupError] = useState('')
+  const lookupEpoch = useRef(0)
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => () => {
+    ++lookupEpoch.current
+  }, [])
+
+  function changeContact() {
+    ++lookupEpoch.current
+    setMatch(null)
+    setLookupError('')
+  }
+
+  async function checkContacts() {
+    if (busy || checking) return
+    const contacts: ParticipationContacts = {}
+    const normalized = normalizePhone(phone)
+    if (normalized) contacts.phone = normalized
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) contacts.email = email.trim()
+    if (!contacts.email && !contacts.phone) return
+    const id = ++lookupEpoch.current
+    try {
+      const found = await api.lookup(contacts)
+      if (id === lookupEpoch.current) {
+        setMatch(found)
+        setLookupError('')
+      }
+    } catch {
+      // Registration checks again before creating a participation.
+    }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || !schoolName.trim()) return
+    if (busy || checking || !schoolName.trim()) return
     const fields = new FormData(event.currentTarget)
     const phone = normalizePhone(String(fields.get('phone')))
     if (!phone) {
@@ -37,15 +79,38 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
       return
     }
     setPhoneError('')
-    onSubmit({
+    const data: Registration = {
       school_name: schoolName.trim(),
       full_name: String(fields.get('full_name')).trim(),
       phone,
       email: String(fields.get('email')).trim(),
       privacy_notice_version: quiz.privacy_notice_version,
-    })
+    }
+    const id = ++lookupEpoch.current
+    setChecking(true)
+    setLookupError('')
+    try {
+      const found = await api.lookup({ email: data.email, phone: data.phone })
+      if (id !== lookupEpoch.current) return
+      setMatch(found)
+      if (found) setPrompt(data)
+      else onSubmit(data)
+    } catch (error) {
+      if (id === lookupEpoch.current) setLookupError(errorMessage(error))
+    } finally {
+      setChecking(false)
+    }
   }
   const invalid = (field: string) => serverFields.includes(field)
+  const disabled = busy || checking
+  const matchingContact = match?.matched_by.length === 2
+    ? 'Este e-mail e telefone já foram utilizados'
+    : match?.matched_by[0] === 'email'
+      ? 'Este e-mail já foi utilizado'
+      : 'Este telefone já foi utilizado'
+  const matchMessage = match
+    ? `${matchingContact} em uma participação ${match.status === 'completed' ? 'já concluída' : 'em andamento'}.`
+    : ''
 
   return (
     <Box
@@ -157,7 +222,7 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
         <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
           Preencha seus dados para iniciar o quiz. Todos os campos são obrigatórios.
         </Typography>
-        <Box component="form" onSubmit={submit} autoComplete="off">
+        <Box component="form" onSubmit={(event) => void submit(event)} autoComplete="off">
           <Stack spacing={2.5}>
             <TextField
               id="full-name"
@@ -165,7 +230,7 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
               label="Nome completo"
               placeholder="Como podemos chamar você?"
               required
-              disabled={busy}
+              disabled={disabled}
               autoComplete="off"
               slotProps={{ htmlInput: { minLength: 2, maxLength: 200 } }}
               error={invalid('full_name')}
@@ -179,7 +244,7 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
               value={schoolName}
               onChange={(event) => setSchoolName(event.target.value)}
               required
-              disabled={busy}
+              disabled={disabled}
               autoComplete="off"
               slotProps={{ htmlInput: { maxLength: 200 } }}
               error={invalid('school_name')}
@@ -192,7 +257,8 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
               type="tel"
               placeholder="(11) 99999-9999"
               required
-              disabled={busy}
+              disabled={disabled}
+              value={phone}
               autoComplete="off"
               slotProps={{ htmlInput: { maxLength: 24 } }}
               error={!!phoneError || invalid('phone')}
@@ -200,7 +266,12 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
                 phoneError ||
                 (invalid('phone') ? 'Confira o telefone e o DDD.' : 'Número brasileiro, com DDD.')
               }
-              onChange={() => setPhoneError('')}
+              onChange={(event) => {
+                setPhone(event.target.value)
+                setPhoneError('')
+                changeContact()
+              }}
+              onBlur={() => void checkContacts()}
             />
             <TextField
               id="email"
@@ -209,12 +280,24 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
               type="email"
               placeholder="voce@exemplo.com"
               required
-              disabled={busy}
+              disabled={disabled}
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value)
+                changeContact()
+              }}
+              onBlur={() => void checkContacts()}
               autoComplete="off"
               slotProps={{ htmlInput: { maxLength: 254 } }}
               error={invalid('email')}
               helperText={invalid('email') ? 'Informe um e-mail válido.' : undefined}
             />
+            {match && (
+              <Alert severity="info">
+                {matchMessage} Ao continuar, você poderá retomar essa participação ou fazer um novo teste.
+              </Alert>
+            )}
+            {lookupError && <Alert severity="error">{lookupError}</Alert>}
             <Alert
               severity="info"
               role="note"
@@ -233,16 +316,52 @@ export function RegistrationForm({ quiz, busy, serverFields, onSubmit }: Props) 
               variant="contained"
               type="submit"
               fullWidth
-              disabled={busy || !schoolName.trim()}
-              loading={busy}
+              disabled={disabled || !schoolName.trim()}
+              loading={disabled}
               loadingPosition="end"
               endIcon={<ArrowForwardRounded />}
             >
-              {busy ? 'Iniciando…' : 'Começar meu quiz'}
+              {checking ? 'Verificando participação…' : busy ? 'Iniciando…' : 'Começar meu quiz'}
             </Button>
           </Stack>
         </Box>
       </Paper>
+      <Dialog
+        open={prompt !== null}
+        onClose={() => setPrompt(null)}
+        aria-labelledby="existing-participation-title"
+        aria-describedby="existing-participation-description"
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle id="existing-participation-title">
+          Já encontramos uma participação sua
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="existing-participation-description">
+            {matchMessage} Deseja continuar de onde parou?
+            {match?.status === 'completed' && ' Você poderá consultar seu resultado e encaminhamento.'}
+            {match?.status === 'draft' && ' Marcações ainda não enviadas não são recuperadas após recarregar a página.'}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ flexWrap: 'wrap', gap: 1, px: 3, pb: 3 }}>
+          <Button onClick={() => setPrompt(null)}>Voltar ao cadastro</Button>
+          <Button variant="outlined" onClick={() => {
+            if (!prompt) return
+            onSubmit({ ...prompt, start_new: true })
+            setPrompt(null)
+          }}>
+            Fazer novo teste
+          </Button>
+          <Button variant="contained" onClick={() => {
+            if (!prompt) return
+            onResume({ email: prompt.email, phone: prompt.phone })
+            setPrompt(null)
+          }}>
+            Continuar participação
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

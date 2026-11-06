@@ -14,6 +14,25 @@ from pydantic import (
 )
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=200)]
+Phone = Annotated[str, StringConstraints(pattern=r"^\+55[1-9][0-9][0-9]{8,9}$")]
+
+
+class ParticipationContacts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phone: Phone | None = None
+    email: Annotated[EmailStr, Field(max_length=254)] | None = None
+
+    @model_validator(mode="after")
+    def require_contact(self):
+        if self.phone is None and self.email is None:
+            raise ValueError("Informe um e-mail ou telefone.")
+        return self
+
+
+class ParticipationMatch(BaseModel):
+    status: Literal["draft", "submitted", "completed"]
+    matched_by: list[Literal["email", "phone"]]
 
 
 class Registration(BaseModel):
@@ -23,11 +42,12 @@ class Registration(BaseModel):
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
     ]
     full_name: Name
-    phone: Annotated[str, StringConstraints(pattern=r"^\+55[1-9][0-9][0-9]{8,9}$")]
+    phone: Phone
     email: Annotated[EmailStr, Field(max_length=254)]
     privacy_notice_version: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
     ]
+    start_new: StrictBool = False
 
 
 class Submission(BaseModel):

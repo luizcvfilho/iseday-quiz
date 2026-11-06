@@ -141,7 +141,7 @@ def make_participations(api):
         ("Carla Exemplo", "pending"),
         ("Daniel Rascunho", "draft"),
     ):
-        ids.append(register(api, full_name=name).json()["id"])
+        ids.append(register(api, full_name=name, start_new=True).json()["id"])
         if state != "draft":
             assert submit(api).status_code == 200
         if state in ("yes", "no"):
@@ -258,7 +258,7 @@ def test_production_admin_cookie(api, admin):
 def test_period_includes_whole_days_in_brasilia(api, admin):
     first = register(api).json()["id"]
     api.client.post("/api/participations/me/end", headers=WRITE)
-    second = register(api).json()["id"]
+    second = register(api, start_new=True).json()["id"]
     with Session(api.engine) as session, session.begin():
         for pid, stamp in (
             (first, "2026-01-02T02:59:59+00:00"),
@@ -282,7 +282,7 @@ def test_free_text_schools_in_reports_filters_and_csv(api, admin):
     ids = []
     for name in names:
         api.client.cookies.clear()
-        response = register(api, school_name=name)
+        response = register(api, school_name=name, start_new=True)
         assert response.status_code == 201
         ids.append(response.json()["id"])
     login(api)

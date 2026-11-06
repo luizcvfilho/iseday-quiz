@@ -4,12 +4,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.db import get_session
 from app.participants import service
 from app.participants.schemas import (
     CurrentQuiz,
     Feedback,
     FeedbackResult,
+    ParticipationContacts,
+    ParticipationMatch,
     ParticipationResult,
     ParticipationSession,
     QuizContent,
@@ -39,6 +42,40 @@ def quiz(request: Request, session: Database):
         return service.current_quiz(session, request.app.state.settings)
 
 
+def set_session_cookie(
+    response: Response, settings: Settings, summary: ParticipationSession, token: str
+):
+    response.set_cookie(
+        cookie_name(settings.app_env == "production"),
+        token,
+        max_age=max(0, int((summary.access_expires_at - datetime.now(UTC)).total_seconds())),
+        expires=summary.access_expires_at.astimezone(UTC),
+        path="/",
+        secure=settings.app_env == "production",
+        httponly=True,
+        samesite="strict",
+    )
+
+
+@router.post("/participations/lookup", response_model=ParticipationMatch | None, dependencies=WRITE)
+def lookup(data: ParticipationContacts, request: Request, session: Database):
+    throttle(
+        request, "participation_lookup", request.app.state.settings.participant_registration_limit
+    )
+    with session.begin():
+        return service.lookup_participation(session, data)
+
+
+@router.post("/participations/resume", response_model=ParticipationSession, dependencies=WRITE)
+def resume(data: ParticipationContacts, request: Request, response: Response, session: Database):
+    settings = request.app.state.settings
+    throttle(request, "participation_resume", settings.participant_registration_limit)
+    with session.begin():
+        summary, token = service.resume_by_contacts(session, data, settings)
+    set_session_cookie(response, settings, summary, token)
+    return summary
+
+
 @router.post("/participations", response_model=ParticipationSession, dependencies=WRITE)
 def register(data: Registration, request: Request, response: Response, session: Database):
     settings = request.app.state.settings
@@ -46,17 +83,7 @@ def register(data: Registration, request: Request, response: Response, session: 
     with session.begin():
         summary, token, created = service.register(session, data, settings, access_token(request))
     response.status_code = 201 if created else 200
-    production = settings.app_env == "production"
-    response.set_cookie(
-        cookie_name(production),
-        token,
-        max_age=max(0, int((summary.access_expires_at - datetime.now(UTC)).total_seconds())),
-        expires=summary.access_expires_at.astimezone(UTC),
-        path="/",
-        secure=production,
-        httponly=True,
-        samesite="strict",
-    )
+    set_session_cookie(response, settings, summary, token)
     return summary
 
 
