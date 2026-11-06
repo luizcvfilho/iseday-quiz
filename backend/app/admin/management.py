@@ -1,4 +1,4 @@
-"""Administrative exports of registration data and saved final referrals."""
+"""Administrative exports of registration data, saved results and confirmation."""
 
 import csv
 from io import BytesIO, StringIO
@@ -12,15 +12,16 @@ from sqlalchemy.orm import Session
 
 from app.admin import service
 from app.admin.schemas import Filters
-from app.models import Participation, ParticipationFeedback
+from app.models import Participation
 
 HEADERS = (
     "Nome",
     "Escola",
     "Telefone",
     "E-mail",
-    "Encaminhamento final",
-    "Orientações do encaminhamento",
+    "Áreas vencedoras",
+    "Cursos sugeridos",
+    "Confirmação",
 )
 
 
@@ -31,21 +32,31 @@ def export_rows(session: Session, filters: Filters):
         raise HTTPException(
             422, "A exportação permite até 10.000 participações. Restrinja os filtros."
         )
-    return session.execute(
-        select(
-            Participation.full_name,
-            Participation.school_name,
-            Participation.phone,
-            Participation.email,
-            ParticipationFeedback.destination,
-            ParticipationFeedback.destination_instructions,
+    contacts = {
+        row.id: (row.phone, row.email)
+        for row in session.execute(
+            select(
+                Participation.id,
+                Participation.phone,
+                Participation.email,
+            ).where(Participation.id.in_(query))
         )
-        .outerjoin(
-            ParticipationFeedback, ParticipationFeedback.participation_id == Participation.id
+    }
+    return [
+        (
+            row.full_name,
+            row.school_name,
+            *contacts[row.id],
+            ", ".join(area.name for area in row.winning_areas),
+            ", ".join(course.name for course in row.recommended_courses),
+            "Sem resposta"
+            if row.agrees_with_result is None
+            else "Concordou"
+            if row.agrees_with_result
+            else "Discordou",
         )
-        .where(Participation.id.in_(query))
-        .order_by(Participation.started_at.desc(), Participation.id.desc())
-    )
+        for row in service.rows(session, query)
+    ]
 
 
 def export_csv(session: Session, filters: Filters):
@@ -73,7 +84,7 @@ def export_xlsx(session: Session, filters: Filters):
     workbook = Workbook(write_only=True)
     sheet = workbook.create_sheet("Participações")
     sheet.freeze_panes = "A2"
-    for column, width in zip("ABCDEF", (35, 35, 22, 40, 50, 85), strict=True):
+    for column, width in zip("ABCDEFG", (35, 35, 22, 40, 50, 85, 20), strict=True):
         sheet.column_dimensions[column].width = width
     headers = [WriteOnlyCell(sheet, value=header) for header in HEADERS]
     for cell in headers:
@@ -90,7 +101,7 @@ def export_xlsx(session: Session, filters: Filters):
             cell.alignment = Alignment(vertical="top", wrap_text=True)
             cells.append(cell)
         sheet.append(cells)
-    sheet.auto_filter.ref = f"A1:F{row_number}"
+    sheet.auto_filter.ref = f"A1:G{row_number}"
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()

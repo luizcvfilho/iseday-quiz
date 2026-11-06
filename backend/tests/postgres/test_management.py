@@ -21,8 +21,9 @@ HEADERS = [
     "Escola",
     "Telefone",
     "E-mail",
-    "Encaminhamento final",
-    "Orientações do encaminhamento",
+    "Áreas vencedoras",
+    "Cursos sugeridos",
+    "Confirmação",
 ]
 
 
@@ -38,13 +39,14 @@ def read_export(response, format):
     assert sheet.freeze_panes == "A2"
     assert all(cell.data_type != "f" for row in sheet for cell in row)
     rows = [[cell or "" for cell in row] for row in sheet.values]
+    assert sheet.auto_filter.ref == f"A1:G{len(rows)}"
     workbook.close()
     return rows
 
 
 @pytest.mark.parametrize("format", ["csv", "xlsx"])
 @pytest.mark.parametrize("status", ["draft", "submitted"])
-def test_export_includes_only_registration_and_pending_referral(api, admin, format, status):
+def test_export_includes_registration_results_and_pending_confirmation(api, admin, format, status):
     login(api)
     register(api, full_name='=HYPERLINK("example")')
     if status == "submitted":
@@ -62,8 +64,9 @@ def test_export_includes_only_registration_and_pending_referral(api, admin, form
             "Test school",
             prefix + "+5511999999999",
             "student@example.org",
-            "",
-            "",
+            "Area 0, Area 1" if status == "submitted" else "",
+            "Course 0, Course 2" if status == "submitted" else "",
+            "Sem resposta",
         ],
     ]
     empty = api.client.get(f"/api/admin/export.{format}?status=completed")
@@ -81,7 +84,9 @@ def test_export_includes_only_registration_and_pending_referral(api, admin, form
 
 @pytest.mark.parametrize("format", ["csv", "xlsx"])
 @pytest.mark.parametrize("referral", ["all_courses", "chosen_course", "psychology"])
-def test_export_contains_the_saved_final_referral(api, admin, format, referral):
+def test_export_contains_all_saved_winners_recommendations_and_confirmation(
+    api, admin, format, referral
+):
     login(api)
     register(api, school_name="Colégio São João")
     submit(api)
@@ -91,7 +96,6 @@ def test_export_contains_the_saved_final_referral(api, admin, format, referral):
         course=api.quiz.courses[0] if referral == "chosen_course" else None,
     )
     assert result.status_code == 200
-    saved = result.json()
     response = api.client.get(f"/api/admin/export.{format}?status=completed")
     rows = read_export(response, format)
     assert rows[0] == HEADERS
@@ -101,11 +105,10 @@ def test_export_contains_the_saved_final_referral(api, admin, format, referral):
         "Colégio São João",
         ("'" if format == "csv" else "") + "+5511999999999",
         "student@example.org",
-        saved["destination"],
-        saved["destination_instructions"],
+        "Area 0, Area 1",
+        "Course 0, Course 2",
+        "Discordou" if referral == "psychology" else "Concordou",
     ]
-    if referral == "all_courses":
-        assert "Course 0" in rows[1][5] and "Course 2" in rows[1][5]
 
 
 def test_export_requires_authentication_and_version_management_is_removed(api, admin):
