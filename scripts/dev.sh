@@ -6,6 +6,8 @@ if [[ ! -f .env ]]; then
   echo "Execute ./scripts/setup.sh primeiro."
   exit 1
 fi
+echo "Aplicando migrações no banco local antes de iniciar a aplicação..."
+(cd backend && uv run --frozen alembic upgrade head)
 api_pid=""
 frontend_pid=""
 cleanup() {

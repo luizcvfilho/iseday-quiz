@@ -33,7 +33,7 @@ make setup
 make dev
 ```
 
-`make setup` instala as dependências, o Chromium e o hook pre-commit neste clone, e cria `.env` se necessário. `make dev` inicia o PostgreSQL no Docker, aguarda o banco ficar pronto e executa frontend e API locais com recarregamento automático; `Ctrl+C` encerra esses dois processos. Use `make down` para encerrar também o banco.
+`make setup` instala as dependências, o Chromium e o hook pre-commit neste clone, e cria `.env` se necessário. `make dev` inicia o PostgreSQL no Docker, aguarda o banco ficar pronto, aplica as migrações pendentes em `DATABASE_URL` e executa frontend e API locais com recarregamento automático. Se a migração falhar, os servidores não são iniciados. `Ctrl+C` encerra esses dois processos. Use `make down` para encerrar também o banco.
 
 `make check` executa as verificações existentes e `make check-db` executa os testes de integração PostgreSQL. `make` ou `make help` lista os comandos disponíveis.
 
@@ -57,11 +57,11 @@ Os serviços são publicados somente em `127.0.0.1`. Este Compose serve para des
 ```bash
 ./scripts/setup.sh
 # Instala dependências, Chromium e pre-commit; cria .env se ainda não existir.
-docker compose up -d db
+docker compose up -d --wait db
 ./scripts/dev.sh
 ```
 
-O último comando inicia Vite e Uvicorn com recarregamento automático. `Ctrl+C` encerra ambos. O Vite encaminha `/api` para a API, mantendo a mesma origem no navegador. Não use `vite preview` como servidor integrado: esse proxy é de desenvolvimento; em produção, o Caddy encaminha `/api` no servidor web.
+O último comando aplica as migrações pendentes antes de iniciar Vite e Uvicorn com recarregamento automático. O banco precisa estar acessível; uma falha nas migrações interrompe a inicialização. `Ctrl+C` encerra ambos. O Vite encaminha `/api` para a API, mantendo a mesma origem no navegador. Não use `vite preview` como servidor integrado: esse proxy é de desenvolvimento; em produção, o Caddy encaminha `/api` no servidor web.
 
 A API pode iniciar sem o PostgreSQL: `/api/health` retorna 200; `/api/health/ready` retorna 503 enquanto o banco não estiver acessível.
 
@@ -148,7 +148,7 @@ O nome do banco deve terminar em `_test`. Os testes criam e removem apenas esque
 
 ## Banco e migrações
 
-Os 13 modelos do domínio estão em `backend/app/models.py`. A revisão `0001` cria tabelas, índices, constraints e triggers. As regras SQL dessa revisão ficam em `backend/migrations/versions/0001_integrity.sql`, carregadas pela migração; ambos os arquivos devem ser distribuídos juntos. A revisão `0002` copia o nome da escola para `participations.school_name` em todas as participações existentes e remove o vínculo e a tabela `schools`. O downgrade recria escolas pelos nomes salvos, sem recuperar os antigos IDs, cidade, UF ou disponibilidade. Aplique `make migrate` ao atualizar uma instalação existente. Não use `create_all` nem execute `docs/database-schema.sql`: esse arquivo é a proposta original, não uma migração.
+Os 13 modelos do domínio estão em `backend/app/models.py`. A revisão `0001` cria tabelas, índices, constraints e triggers. As regras SQL dessa revisão ficam em `backend/migrations/versions/0001_integrity.sql`, carregadas pela migração; ambos os arquivos devem ser distribuídos juntos. A revisão `0002` copia o nome da escola para `participations.school_name` em todas as participações existentes e remove o vínculo e a tabela `schools`. O downgrade recria escolas pelos nomes salvos, sem recuperar os antigos IDs, cidade, UF ou disponibilidade. No desenvolvimento local, `make dev` aplica as migrações automaticamente; com a API no Docker Compose, use `make migrate`. Não use `create_all` nem execute `docs/database-schema.sql`: esse arquivo é a proposta original, não uma migração.
 
 Para preparar um banco vazio ou atualizar o banco local:
 

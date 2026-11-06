@@ -14,7 +14,7 @@ help:
 		'make setup-browser Instala o Chromium exigido pelo Playwright.' \
 		'make setup-browser-deps Instala Chromium e bibliotecas de sistema (pode exigir sudo).' \
 		'make hooks     Instala o hook pre-commit neste clone.' \
-		'make dev       Inicia o banco no Docker e frontend/API locais.' \
+		'make dev       Inicia o banco, aplica migrações e inicia frontend/API locais.' \
 		'make db        Inicia somente o PostgreSQL e aguarda ficar pronto.' \
 		'make migrate   Aplica as migrações na API em execução no Docker.' \
 		'make check     Executa as verificações de frontend e backend locais.' \
