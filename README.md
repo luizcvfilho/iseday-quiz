@@ -312,7 +312,7 @@ No Docker Compose:
 docker compose exec -it api uv run --no-sync python -m app.admin create
 ```
 
-O comando solicita e-mail, nome, senha e confirmação. A senha exige pelo menos 12 caracteres, não aparece no terminal e é armazenada apenas como hash Argon2. Não passe senhas por argumentos, arquivos de configuração ou variáveis `VITE_*`. Uma conta com o mesmo e-mail, ignorando maiúsculas, é recusada. As tabelas administrativas já pertencem à migração `0001`; esta funcionalidade não exige nova revisão.
+O comando solicita e-mail, nome, senha e confirmação. A senha deve ter de 1 a 1024 caracteres, não aparece no terminal e é armazenada apenas como hash Argon2. Não passe senhas por argumentos, arquivos de configuração ou variáveis `VITE_*`. Uma conta com o mesmo e-mail, ignorando maiúsculas, é recusada. As tabelas administrativas já pertencem à migração `0001`; esta funcionalidade não exige nova revisão.
 
 Para redefinir uma senha, use o comando abaixo, que solicita o e-mail e a nova senha e revoga todas as sessões anteriores da conta na mesma transação:
 

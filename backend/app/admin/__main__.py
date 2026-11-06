@@ -53,9 +53,9 @@ def main():
         name = input("Nome: ").strip() if args.command == "create" else ""
         if args.command == "create" and not 2 <= len(name) <= 200:
             raise ValueError("O nome deve ter de 2 a 200 caracteres.")
-        password = getpass("Senha (mínimo 12 caracteres): ")
-        if not 12 <= len(password) <= 1024:
-            raise ValueError("A senha deve ter de 12 a 1024 caracteres.")
+        password = getpass("Senha: ")
+        if not 1 <= len(password) <= 1024:
+            raise ValueError("A senha deve ter de 1 a 1024 caracteres.")
         if getpass("Confirme a senha: ") != password:
             raise ValueError("As senhas não coincidem.")
         engine = build_engine(get_settings())
