@@ -15,7 +15,6 @@ import { QuizSelection } from './components/QuizSelection'
 import { QuizResult } from './components/QuizResult'
 import { Alert, AlertTitle, Box, Button, Paper, Stack, Typography } from '@mui/material'
 import NorthEastRounded from '@mui/icons-material/NorthEastRounded'
-import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded'
 import { FlowLayout } from './components/FlowLayout'
 import { SectionHeading, StatusScreen } from './components/Presentation'
 import { brand } from './theme'
@@ -281,11 +280,7 @@ export function QuizFlow() {
     try {
       const saved = await api.result()
       if (id !== epoch.current) return
-      if (
-        screen === 'review' ||
-        (saved.feedback &&
-          saved.feedback.agrees_with_result === pendingFeedback.current?.agrees_with_result)
-      ) {
+      if (saved.feedback || screen === 'review') {
         setError('')
         showResult(saved)
       } else {
@@ -326,7 +321,6 @@ export function QuizFlow() {
     try {
       const saved = await api.feedback(attempt)
       if (id === epoch.current) {
-        setResult((previous) => previous && { ...previous, status: 'completed', feedback: saved })
         setReferral(saved)
         setScreen('referral')
         setUncertain(false)
@@ -505,18 +499,6 @@ export function QuizFlow() {
                 {referral.destination_instructions}
               </Typography>
             </Paper>
-            <Button
-              variant="outlined"
-              startIcon={<ArrowBackRounded />}
-              disabled={busy}
-              onClick={() => {
-                setError('')
-                setScreen('result')
-              }}
-              sx={{ mb: 3, width: { xs: '100%', sm: 'auto' } }}
-            >
-              Voltar e mudar resposta
-            </Button>
             <Typography variant="caption" component="p" color="textSecondary" sx={{ mb: 3 }}>
               Sua participação foi registrada. Você pode voltar a esta página para consultar seu
               encaminhamento enquanto sua sessão estiver válida.

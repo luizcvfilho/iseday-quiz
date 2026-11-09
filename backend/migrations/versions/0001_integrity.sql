@@ -89,12 +89,7 @@ BEGIN
             RAISE EXCEPTION
                 'Delete the participation for controlled retention';
         END IF;
-        IF NEW.participation_id IS DISTINCT FROM OLD.participation_id THEN
-            RAISE EXCEPTION 'Feedback participation cannot change';
-        END IF;
-        IF v_status IS DISTINCT FROM 'completed' THEN
-            RAISE EXCEPTION 'Feedback revisions require a completed participation';
-        END IF;
+        RAISE EXCEPTION 'Feedback is immutable';
     ELSE
         SELECT status INTO v_status FROM participations
             WHERE id = NEW.participation_id FOR UPDATE;

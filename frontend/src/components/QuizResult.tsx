@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import {
-  Alert,
   Box,
   Button,
   Card,
@@ -33,7 +32,7 @@ export function QuizResult({
   uncertain: boolean
   onConfirm: (data: Feedback) => void
 }) {
-  const [agrees, setAgrees] = useState<boolean | null>(result.feedback?.agrees_with_result ?? null)
+  const [agrees, setAgrees] = useState<boolean | null>(null)
   const winners = result.areas.filter((a) => a.is_winner)
   const recommended = result.courses.filter((c) => c.is_recommended)
   return (
@@ -162,12 +161,6 @@ export function QuizResult({
               </Paper>
             ))}
           </RadioGroup>
-          {agrees === false && (
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Visite o estande de Psicologia no ginásio para conversar sobre seus interesses e
-              explorar outras possibilidades.
-            </Alert>
-          )}
         </FormControl>
         <Button
           variant="contained"
