@@ -503,6 +503,9 @@ export function QuizFlow() {
               Sua participação foi registrada. Você pode voltar a esta página para consultar seu
               encaminhamento enquanto sua sessão estiver válida.
             </Typography>
+            <Button variant="contained" disabled={busy} onClick={() => void bootstrap()}>
+              Voltar ao início
+            </Button>
           </Box>
         )}
         {screen === 'loading' && (

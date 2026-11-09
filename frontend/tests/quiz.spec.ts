@@ -219,7 +219,8 @@ test('cadastro, limite, edição, empates e confirmação preservam o encaminham
     page.getByRole('button', { name: /Encerrar|Começar outra participação|Voltar e mudar resposta/ }),
   ).toHaveCount(0)
   await expect(page.getByText(/Vá ao ginásio e visite os estandes/)).toContainText('Fisioterapia')
-  await page.reload()
+  await page.getByRole('button', { name: 'Voltar ao início' }).click()
+  await expect(page.getByRole('heading', { name: 'Continue sua participação.' })).toBeVisible()
   await page.getByRole('button', { name: 'Continuar minha participação' }).click()
   await expect(
     page.getByRole('heading', { name: 'Estandes dos cursos indicados — Ginásio' }),
