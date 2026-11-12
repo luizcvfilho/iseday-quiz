@@ -39,7 +39,7 @@ def run_migrations_online() -> None:
 
     engine = build_engine(get_settings())
     try:
-        with engine.connect() as connection:
+        with engine.begin() as connection:
             migrate_connection(connection)
     finally:
         engine.dispose()

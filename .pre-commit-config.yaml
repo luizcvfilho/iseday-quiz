@@ -33,10 +33,10 @@ repos:
       - <<: *project-check
         id: backend-tests
         name: Backend unit tests (pytest)
-        entry: uv run --project backend --frozen pytest backend/tests --ignore=backend/tests/postgres
+        entry: uv run --project backend --frozen pytest backend/tests --ignore=backend/tests/mysql
       - <<: *project-check
-        id: backend-postgres-tests
-        name: Backend PostgreSQL integration tests
+        id: backend-mysql-tests
+        name: Backend MySQL integration tests
         entry: bash scripts/check-db.sh
       - <<: *project-check
         id: frontend-tests
@@ -44,5 +44,5 @@ repos:
         entry: npm --prefix frontend run test:preview -- --workers=1
       - <<: *project-check
         id: frontend-live-tests
-        name: Browser integration tests (API and PostgreSQL)
+        name: Browser integration tests (API and MySQL)
         entry: bash scripts/with-test-db.sh npm --prefix frontend run test:live -- --workers=1

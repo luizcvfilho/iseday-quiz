@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.catalog import EVENT_NAME, PSYCHOLOGY_DESTINATION, PSYCHOLOGY_INSTRUCTIONS
 from app.core.config import Settings
+from app.db import database_now
 from app.models import (
     Area,
     Course,
@@ -96,7 +97,7 @@ def find_participation(session: Session, token: str | None) -> Participation | N
 def authenticated_participation(session: Session, token: str | None) -> Participation:
     participant = find_participation(session, token)
     # Check expiry after acquiring the lock, including after a concurrent submit/end.
-    now = session.scalar(select(func.clock_timestamp())) if participant else None
+    now = session.scalar(select(database_now())) if participant else None
     if participant is None or participant.access_expires_at <= now:
         raise HTTPException(401, "Sessão ausente, inválida ou expirada.")
     return participant
@@ -152,7 +153,7 @@ def resume_by_contacts(
         raise HTTPException(404, "Não encontramos uma participação com esses contatos.")
     token = secrets.token_urlsafe(32)
     participant.access_token_hash = token_hash(token)
-    participant.access_expires_at = session.scalar(select(func.clock_timestamp())) + timedelta(
+    participant.access_expires_at = session.scalar(select(database_now())) + timedelta(
         minutes=settings.participant_session_minutes
     )
     session.flush()
@@ -167,7 +168,7 @@ def register(
         raise HTTPException(409, "O aviso de uso dos dados mudou. Atualize o cadastro.")
     values = data.model_dump(exclude={"start_new"})
     existing = find_participation(session, existing_token)
-    if existing and existing.access_expires_at > session.scalar(select(func.clock_timestamp())):
+    if existing and existing.access_expires_at > session.scalar(select(database_now())):
         if any(getattr(existing, key) != value for key, value in values.items()):
             raise HTTPException(
                 409, "Já existe uma participação em andamento. Atualize a página para retomá-la."
@@ -183,7 +184,7 @@ def register(
             "ou fazer um novo teste.",
         )
     quiz_content(session)
-    now = session.scalar(select(func.clock_timestamp()))
+    now = session.scalar(select(database_now()))
     token = secrets.token_urlsafe(32)
     participant = Participation(
         **values,
@@ -307,7 +308,7 @@ def submit(session: Session, participant: Participation, statement_ids: list[UUI
         ],
     )
     participant.status = "submitted"
-    participant.submitted_at = session.scalar(select(func.clock_timestamp()))
+    participant.submitted_at = session.scalar(select(database_now()))
     session.flush()
     return saved_result(session, participant)
 
@@ -371,7 +372,7 @@ def record_feedback(session: Session, participant: Participation, data: Feedback
     else:
         destination, instructions = PSYCHOLOGY_DESTINATION, PSYCHOLOGY_INSTRUCTIONS
 
-    now = session.scalar(select(func.clock_timestamp()))
+    now = session.scalar(select(database_now()))
     session.add(
         ParticipationFeedback(
             participation_id=participant.id,

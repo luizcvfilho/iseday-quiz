@@ -13,7 +13,7 @@ from .test_admin import login
 from .test_participants import WRITE, confirm, register, submit
 from .test_participants import api as api
 
-pytestmark = pytest.mark.postgres
+pytestmark = pytest.mark.mysql
 
 
 HEADERS = [

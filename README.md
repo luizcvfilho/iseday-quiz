@@ -1,6 +1,6 @@
 # ISE Day Quiz
 
-Quiz de afinidades: React + TypeScript + Vite, FastAPI e PostgreSQL.
+Quiz de afinidades: React + TypeScript + Vite, FastAPI e MySQL.
 
 Para produção, consulte [PRODUCTION.md](PRODUCTION.md): imagens sem servidor de desenvolvimento, HTTPS, migrações, administração, backup e ensaio com banco descartável. Os comandos de desenvolvimento abaixo continuam independentes.
 
@@ -8,7 +8,7 @@ Para produção, consulte [PRODUCTION.md](PRODUCTION.md): imagens sem servidor d
 
 - **Node.js 24** com npm (versão registrada em `.nvmrc`).
 - **uv** para gerenciar Python 3.13, ambiente virtual e dependências.
-- **Docker com Compose** para executar o PostgreSQL 17 ou a aplicação completa.
+- **Docker com Compose** para executar o MySQL 8.4 ou a aplicação completa.
 
 Para executar toda a aplicação em containers, apenas Docker com Compose é necessário. No desenvolvimento local, mantenha também Node.js, npm e uv disponíveis no PATH. Execute os comandos a partir da raiz do repositório, salvo indicação contrária.
 
@@ -22,7 +22,7 @@ Com GNU Make instalado, execute na raiz do repositório:
 make run
 ```
 
-Esse comando cria `.env` a partir de `.env.example` se necessário e inicia PostgreSQL, API e frontend com Docker Compose, reconstruindo as imagens. Revise as configurações locais antes de iniciar. O frontend fica em <http://localhost:5173> e a documentação da API em <http://localhost:8000/api/docs>. Use `make down` para encerrar os containers preservando os dados e `make logs` para acompanhar os logs. `make up` é um alias de `make run`.
+Esse comando cria `.env` a partir de `.env.example` se necessário e inicia MySQL, API e frontend com Docker Compose, reconstruindo as imagens. Revise as configurações locais antes de iniciar. O frontend fica em <http://localhost:5173> e a documentação da API em <http://localhost:8000/api/docs>. Use `make down` para encerrar os containers preservando os dados e `make logs` para acompanhar os logs. `make up` é um alias de `make run`.
 
 Em outro terminal, com a API em execução, aplique as migrações com `make migrate`. A preparação do catálogo e da conta administrativa segue as instruções das seções abaixo.
 
@@ -33,9 +33,9 @@ make setup
 make dev
 ```
 
-`make setup` instala as dependências, o Chromium e o hook pre-commit neste clone, e cria `.env` se necessário. `make dev` inicia o PostgreSQL no Docker, aguarda o banco ficar pronto, aplica as migrações pendentes em `DATABASE_URL` e executa frontend e API locais com recarregamento automático. Se a migração falhar, os servidores não são iniciados. `Ctrl+C` encerra esses dois processos. Use `make down` para encerrar também o banco.
+`make setup` instala as dependências, o Chromium e o hook pre-commit neste clone, e cria `.env` se necessário. `make dev` inicia o MySQL no Docker, aguarda o banco ficar pronto, aplica as migrações pendentes em `DATABASE_URL` e executa frontend e API locais com recarregamento automático. Se a migração falhar, os servidores não são iniciados. `Ctrl+C` encerra esses dois processos. Use `make down` para encerrar também o banco.
 
-`make check` executa as verificações existentes e `make check-db` executa os testes de integração PostgreSQL. `make` ou `make help` lista os comandos disponíveis.
+`make check` executa as verificações existentes e `make check-db` executa os testes de integração MySQL. `make` ou `make help` lista os comandos disponíveis.
 
 ## Início rápido com Docker
 
@@ -63,7 +63,7 @@ docker compose up -d --wait db
 
 O último comando aplica as migrações pendentes antes de iniciar Vite e Uvicorn com recarregamento automático. O banco precisa estar acessível; uma falha nas migrações interrompe a inicialização. `Ctrl+C` encerra ambos. O Vite encaminha `/api` para a API, mantendo a mesma origem no navegador. Não use `vite preview` como servidor integrado: esse proxy é de desenvolvimento; em produção, o Caddy encaminha `/api` no servidor web.
 
-A API pode iniciar sem o PostgreSQL: `/api/health` retorna 200; `/api/health/ready` retorna 503 enquanto o banco não estiver acessível.
+A API pode iniciar sem o MySQL: `/api/health` retorna 200; `/api/health/ready` retorna 503 enquanto o banco não estiver acessível.
 
 Para executar frontend e API separadamente:
 
@@ -73,15 +73,15 @@ Para executar frontend e API separadamente:
 npm --prefix frontend run dev
 ```
 
-O arquivo `.env` fica na raiz e não é versionado. `DATABASE_URL` configura a API local; no Compose o host do banco é substituído por `db`. Ao mudar `POSTGRES_PORT`, ajuste também a porta em `DATABASE_URL`. Variáveis de ambiente do processo têm precedência. Nunca coloque segredos em variáveis `VITE_*`, pois elas são públicas no navegador.
+O arquivo `.env` fica na raiz e não é versionado. `DATABASE_URL` configura a API local; no Compose o host do banco é substituído por `db`. Ao mudar `MYSQL_PORT`, ajuste também a porta em `DATABASE_URL`. Quem já tem um `.env` da versão com PostgreSQL deve atualizar as chaves de banco conforme `.env.example`, preservando as demais configurações. O Compose cria um volume MySQL separado. Variáveis de ambiente do processo têm precedência. Nunca coloque segredos em variáveis `VITE_*`, pois elas são públicas no navegador.
 
 ## Verificações
 
 O workflow [CI](.github/workflows/ci.yml) executa automaticamente em pushes e pull requests, e também pode ser iniciado manualmente na aba Actions do GitHub. Os jobs verificam:
 
 - Oxlint, Ruff e formatação Python.
-- Todos os testes do backend, incluindo integração com PostgreSQL 17 obrigatório.
-- Build/TypeScript e testes Chromium do frontend, tanto no build quanto com API e PostgreSQL reais.
+- Todos os testes do backend, incluindo integração com MySQL 8.4 obrigatório.
+- Build/TypeScript e testes Chromium do frontend, tanto no build quanto com API e MySQL reais.
 - O ensaio de produção com Docker/HTTPS, persistência e backup/restauração (`make check-production`).
 
 O CI usa Node.js de `.nvmrc`, Python de `backend/.python-version` e instalações pelos lockfiles. Os bancos e containers são descartáveis, com dados fictícios; não é necessário configurar secrets ou arquivos `.env`. Em falhas de navegador, os traces ficam disponíveis como artifacts por sete dias.
@@ -96,9 +96,9 @@ O [pre-commit](.pre-commit-config.yaml) executa lint, tipos, build e testes de b
 | `frontend-typecheck` | Tipos do frontend, configuração e testes Playwright |
 | `frontend-build` | Build do frontend com Vite |
 | `backend-tests` | Testes unitários do backend |
-| `backend-postgres-tests` | Testes de integração com PostgreSQL real |
+| `backend-mysql-tests` | Testes de integração com MySQL real |
 | `frontend-tests` | Testes Chromium sobre o build já gerado |
-| `frontend-live-tests` | Fluxo de navegador com API e PostgreSQL reais |
+| `frontend-live-tests` | Fluxo de navegador com API e MySQL reais |
 
 Tipos e build são executados uma vez antes dos testes de interface. A etapa de integração de navegador executa somente `live.spec.ts`; os demais cenários ficam na etapa de frontend. No CI, o ensaio Docker constrói suas próprias imagens de produção; ele também pode ser iniciado manualmente com `make check-production`.
 
@@ -110,15 +110,15 @@ make setup-browser
 make hooks
 ```
 
-Para executar todas as etapas manualmente, use `make check-all` ou `uv run --project backend --frozen pre-commit run --all-files`. Para ver também a saída das etapas aprovadas, use `bash scripts/check-all.sh --verbose`. Para executar um hook isolado, por exemplo os testes do PostgreSQL:
+Para executar todas as etapas manualmente, use `make check-all` ou `uv run --project backend --frozen pre-commit run --all-files`. Para ver também a saída das etapas aprovadas, use `bash scripts/check-all.sh --verbose`. Para executar um hook isolado, por exemplo os testes do MySQL:
 
 ```bash
-uv run --project backend --frozen pre-commit run backend-postgres-tests --all-files
+uv run --project backend --frozen pre-commit run backend-mysql-tests --all-files
 ```
 
 Ao executar `frontend-tests` isoladamente, gere o build antes com `npm --prefix frontend run build`; na execução completa, o hook `frontend-build` já faz isso.
 
-A suíte local exige Node.js, npm, uv, Docker e Chromium do Playwright. Sem `TEST_DATABASE_URL`, as etapas PostgreSQL e de integração do navegador criam e removem seus próprios bancos temporários. As portas 5179 e 8009 precisam estar livres. Tanto o pre-commit quanto `make check-all` deixam o ensaio de produção fora da execução local automática.
+A suíte local exige Node.js, npm, uv, Docker e Chromium do Playwright. Sem `TEST_DATABASE_URL`, as etapas MySQL e de integração do navegador criam e removem seus próprios bancos temporários. As portas 5179 e 8009 precisam estar livres. Tanto o pre-commit quanto `make check-all` deixam o ensaio de produção fora da execução local automática.
 
 Se aparecer `Executable doesn't exist ... chromium_headless_shell`, execute `make setup-browser` no mesmo ambiente em que roda o Git/pre-commit (por exemplo, dentro do WSL). Repita após atualizar o Playwright, pois cada versão exige seus próprios binários. Se faltarem bibliotecas de sistema em Linux, execute `make setup-browser-deps` em um terminal interativo; a instalação pode solicitar a senha do sudo. Confira `PLAYWRIGHT_BROWSERS_PATH` se tiver personalizado o cache. Antes de cada suíte de navegador, o projeto tenta iniciar o Chromium e informa a correção necessária uma única vez por suíte, em vez de falhar em todos os cenários.
 
@@ -128,33 +128,33 @@ Para executar as verificações localmente:
 ./scripts/check.sh
 ```
 
-Executa lint e build do frontend, lint e formatação Python e os testes. Os testes de saúde da API usam conexão simulada. Sem `TEST_DATABASE_URL`, os testes de integração PostgreSQL são marcados como ignorados.
+Executa lint e build do frontend, lint e formatação Python e os testes. Os testes de saúde da API usam conexão simulada. Sem `TEST_DATABASE_URL`, os testes de integração MySQL são marcados como ignorados.
 
-Para validar a migração e as regras de integridade em PostgreSQL 17 real:
+Para validar a migração e as regras de integridade em MySQL 8.4 real:
 
 ```bash
 ./scripts/check-db.sh
 ```
 
-O script cria um container temporário, com porta local aleatória e dados em memória, e o remove ao terminar. Não usa o banco nem o volume do Compose. Verifica instalação do catálogo fixo, remoção dos dados de teste antigos, rollback em falhas da migração, correspondência com os modelos, restrições e concorrência.
+O script cria um container temporário, com porta local aleatória e dados em memória, e o remove ao terminar. Não usa o banco nem o volume do Compose. Verifica instalação do catálogo fixo, rollback dos dados se a carga inicial falhar, correspondência com os modelos, restrições e concorrência.
 
 Também é possível usar um servidor de teste existente:
 
 ```bash
-TEST_DATABASE_URL=postgresql+psycopg://usuario:senha@localhost:5432/iseday_test ./scripts/check-db.sh
+TEST_DATABASE_URL=mysql+pymysql://usuario:senha@localhost:3306/iseday_test ./scripts/check-db.sh
 ```
 
-O nome do banco deve terminar em `_test`. Os testes criam e removem apenas esquemas aleatórios próprios; o usuário precisa de permissão para criar esquemas. `REQUIRE_POSTGRES_TESTS=1` faz a ausência de `TEST_DATABASE_URL` falhar em vez de ignorar os testes, para uso em CI.
+O nome do banco deve terminar em `_test` e ter até 29 letras, dígitos ou sublinhados. Os testes criam e removem bancos com um sufixo aleatório, sem alterar a base indicada na URL. Use uma instância descartável e uma conta que possa criar e remover esses bancos, instalar tabelas e gatilhos e gravar dados. `REQUIRE_MYSQL_TESTS=1` faz a ausência de `TEST_DATABASE_URL` falhar em vez de ignorar os testes, para uso em CI.
 
 ## Estrutura
 
 ```text
 frontend/             React, TypeScript, Vite e React Router
-backend/app/          FastAPI, configuração e conexão SQLAlchemy/Psycopg
+backend/app/          FastAPI, configuração e conexão SQLAlchemy/PyMySQL
 backend/migrations/   Migrações Alembic e regras de integridade versionadas
-backend/tests/        Testes da API e integração PostgreSQL em postgres/
+backend/tests/        Testes da API e integração MySQL em mysql/
 scripts/              Setup, desenvolvimento e verificações
-compose.yaml          PostgreSQL, API e frontend em desenvolvimento
+compose.yaml          MySQL, API e frontend em desenvolvimento
 ```
 
 As dependências de backend incluem validação de e-mail, Argon2 para a autenticação administrativa e openpyxl para a validação da planilha do catálogo. O fluxo do aluno oferece telas e API de cadastro, sessão, submissão, resultado, confirmação e encaminhamento. A área administrativa oferece login, filtros, resumo e consulta individual dos resultados.
@@ -189,10 +189,10 @@ npm run test:build
 
 Em Linux sem bibliotecas do Chromium, prepare as dependências indicadas pelo Playwright (`npx playwright install --with-deps chromium`). Os testes usam servidores temporários locais e dados fictícios. Os cenários incluem Autocomplete, teclado, limite/edição de escolhas, empates, falhas de conexão, reenvio, retomada, expiração, preservação dos dados durante pausas, página não encontrada e layout móvel. `./scripts/check.sh` mantém as verificações de lint/build/backend; os testes de navegador são executados separadamente. O build separa React e Material UI em arquivos próprios para cache e mantém os pesos/subconjuntos de fonte usados pela interface.
 
-Para testar também o fluxo com API real, catálogo original e PostgreSQL, configure um banco de teste cujo nome termine em `_test`:
+Para testar também o fluxo com API real, catálogo original e MySQL, configure um banco de teste cujo nome termine em `_test`:
 
 ```bash
-TEST_DATABASE_URL=postgresql+psycopg://usuario:senha@localhost:5432/iseday_test npm run test:live
+TEST_DATABASE_URL=mysql+pymysql://usuario:senha@localhost:3306/iseday_test npm run test:live
 ```
 
 Esse comando também exige `uv` no PATH. O servidor de teste cria um esquema aleatório próprio, aplica a migração, instala o catálogo fixo **somente nesse esquema de teste** e usa os nomes de escola digitados durante o teste. O esquema é removido ao encerrar. Não usa o banco da aplicação nem altera o catálogo dela. As portas 5179 (Vite) e 8009 (API de teste) precisam estar livres. Capturas e traces de teste ficam em `frontend/test-results/`, fora do Git.
@@ -283,7 +283,7 @@ O POST de feedback retorna 200 com `participation_id`, `status: "completed"`, `c
 
 As respostas `/api/` usam `Cache-Control: no-store`; erros de validação omitem os valores enviados e falhas de banco retornam mensagem genérica. Há limites por IP em janelas de 60 segundos: `PARTICIPANT_REGISTRATION_LIMIT` (60) para cadastro e `PARTICIPANT_SUBMISSION_LIMIT` (120) para cada uma das operações de submissão e feedback, em janelas separadas. Cada operação também permite 30 tentativas por credencial por minuto. O excesso retorna 429 com `Retry-After`. O controle usa memória limitada por processo; implantações com múltiplos workers precisam de limite compartilhado no proxy. Configure proxies confiáveis no servidor antes de usar IPs encaminhados.
 
-Os testes PostgreSQL exercitam as rotas com banco real, rollback, isolamento de sessões, expiração, revogação, imutabilidade do catálogo, encaminhamentos para os estandes no ginásio, submissões e confirmações concorrentes. Execute-os com `./scripts/check-db.sh` ou com `TEST_DATABASE_URL` apontando para um banco descartável cujo nome termine em `_test`.
+Os testes MySQL exercitam as rotas com banco real, rollback, isolamento de sessões, expiração, revogação, imutabilidade do catálogo, encaminhamentos para os estandes no ginásio, submissões e confirmações concorrentes. Execute-os com `./scripts/check-db.sh` ou com `TEST_DATABASE_URL` apontando para um banco descartável cujo nome termine em `_test`.
 
 Antes da publicação, validar o conteúdo e a metodologia do quiz.
 
@@ -312,7 +312,7 @@ No Docker Compose:
 docker compose exec -it api uv run --no-sync python -m app.admin create
 ```
 
-O comando solicita e-mail, nome, senha e confirmação. A senha deve ter de 1 a 1024 caracteres, não aparece no terminal e é armazenada apenas como hash Argon2. Não passe senhas por argumentos, arquivos de configuração ou variáveis `VITE_*`. Uma conta com o mesmo e-mail, ignorando maiúsculas, é recusada. As tabelas administrativas já pertencem à migração `0001`; esta funcionalidade não exige nova revisão.
+O comando solicita e-mail, nome, senha e confirmação. A senha deve ter de 1 a 1024 caracteres, não aparece no terminal e é armazenada apenas como hash Argon2. Não passe senhas por argumentos, arquivos de configuração ou variáveis `VITE_*`. Uma conta com o mesmo e-mail, ignorando maiúsculas, é recusada. A migração inicial `0001_mysql` já cria as tabelas administrativas.
 
 Para redefinir uma senha, use o comando abaixo, que solicita o e-mail e a nova senha e revoga todas as sessões anteriores da conta na mesma transação:
 
@@ -347,7 +347,7 @@ As consultas usam os resultados persistidos, sem recalcular ou editar respostas.
 
 Listagem e resumo aceitam `q`, `school_name`, `status` (`draft`, `submitted`, `completed`), `area_id`, `course_id`, `agreement` (`yes`, `no`, `pending`), `date_from` e `date_to` (`AAAA-MM-DD`). O filtro de escola compara o nome salvo exatamente; as opções vêm dos nomes distintos já informados pelos participantes. Área e curso filtram apenas indicadores de vitória/sugestão. As consultas mantêm um retrato consistente do banco durante submissões concorrentes.
 
-Os testes PostgreSQL cobrem credenciais incorretas, conta inativa, cookies, expiração, revogação, troca de senha, isolamento do participante, limites, filtros, paginação, empates, rascunhos, histórico e auditoria. `npm --prefix frontend test` inclui os cenários administrativos de navegador, recuperação de erros e layout móvel. `npm --prefix frontend run test:live`, com `TEST_DATABASE_URL`, valida também cadastro → resultado → confirmação → login administrativo → consulta individual → logout contra a API e o banco reais, criando uma conta fictícia exclusivamente no esquema temporário do teste.
+Os testes MySQL cobrem credenciais incorretas, conta inativa, cookies, expiração, revogação, troca de senha, isolamento do participante, limites, filtros, paginação, empates, rascunhos, histórico e auditoria. `npm --prefix frontend test` inclui os cenários administrativos de navegador, recuperação de erros e layout móvel. `npm --prefix frontend run test:live`, com `TEST_DATABASE_URL`, valida também cadastro → resultado → confirmação → login administrativo → consulta individual → logout contra a API e o banco reais, criando uma conta fictícia exclusivamente no esquema temporário do teste.
 
 ### Quiz único
 
@@ -364,4 +364,4 @@ A exportação exige autenticação, gera auditoria e neutraliza células que po
 | `GET /api/admin/export.csv` | Exporta o conjunto filtrado; aceita os mesmos filtros da consulta administrativa. |
 | `GET /api/admin/export.xlsx` | Exporta os mesmos dados e filtros em uma planilha Excel. |
 
-Os testes verificam a migração para o catálogo único, remoção transacional dos dados de teste, preservação de administradores, imutabilidade do catálogo e dos resultados, concorrência, filtros, exportação e ausência das antigas rotas de versões. O teste com API e PostgreSQL reais percorre cadastro, resultado agrupado, confirmação, consulta administrativa e exportação CSV e XLSX em um esquema descartável.
+Os testes verificam a instalação do catálogo único, a imutabilidade do catálogo e dos resultados, concorrência, filtros, exportação e ausência das antigas rotas de versões. O teste com API e MySQL reais percorre cadastro, resultado agrupado, confirmação, consulta administrativa e exportação CSV e XLSX em um esquema descartável.

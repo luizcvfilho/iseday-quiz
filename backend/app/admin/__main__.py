@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from getpass import getpass
 
 from pydantic import EmailStr, TypeAdapter, ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,7 @@ from app.models import AdminSession, AdminUser
 def save_account(session: Session, command: str, email: str, password: str, name: str = ""):
     """Caller owns the transaction. Password changes invalidate all existing sessions."""
     user = session.scalar(
-        select(AdminUser).where(func.lower(AdminUser.email) == email.lower()).with_for_update()
+        select(AdminUser).where(AdminUser.email == email.lower()).with_for_update()
     )
     if command == "create":
         if user is not None:

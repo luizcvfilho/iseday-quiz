@@ -19,7 +19,7 @@ def client():
     app = create_app(
         Settings(
             app_env="test",
-            database_url="postgresql+psycopg://test:test@127.0.0.1:1/api_test",
+            database_url="mysql+pymysql://test:test@127.0.0.1:1/api_test",
             _env_file=None,
         )
     )

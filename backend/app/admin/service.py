@@ -99,12 +99,13 @@ def options(session: Session) -> Options:
 
 
 def rows(session: Session, query) -> list[ParticipationRow]:
+    matched_ids = query.subquery()
     records = session.execute(
         select(Participation, ParticipationFeedback.agrees_with_result)
+        .join(matched_ids, matched_ids.c.id == Participation.id)
         .outerjoin(
             ParticipationFeedback, ParticipationFeedback.participation_id == Participation.id
         )
-        .where(Participation.id.in_(query))
         .order_by(Participation.started_at.desc(), Participation.id.desc())
     ).all()
     ids = [p.id for p, *_ in records]
@@ -208,7 +209,7 @@ def summary(session: Session, filters: Filters):
                 .select_from(entity)
                 .join(model, getattr(model, key) == entity.id)
                 .where(model.participation_id.in_(select(ids.c.id)), getattr(model, flag).is_(True))
-                .group_by(entity.id)
+                .group_by(entity.id, entity.name)
                 .order_by(func.count().desc(), entity.name, entity.id)
             )
         ]

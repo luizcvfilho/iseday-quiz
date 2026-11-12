@@ -6,7 +6,7 @@ cd "$PROJECT_ROOT"
 npm --prefix frontend run browser:check
 test_dir="$(mktemp -d)"
 project="iseday-production-test-$(date +%s)-$$"
-compose=(docker compose --project-name "$project" --env-file "$test_dir/production.env" -f compose.production.yaml)
+compose=(docker compose --project-name "$project" --env-file "$test_dir/production.env" -f compose.production.yaml -f compose.production.mysql.yaml)
 cleanup() {
   status=$?
   trap - EXIT
@@ -23,27 +23,29 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # Elimina interferência das variáveis exportadas de outros ambientes.
-unset DATABASE_URL POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD SITE_ADDRESS
+unset DATABASE_URL MIGRATION_DATABASE_URL MYSQL_DATABASE MYSQL_USER MYSQL_PASSWORD MYSQL_ROOT_PASSWORD SITE_ADDRESS
 unset HTTP_BIND_ADDRESS HTTP_PORT HTTPS_PORT APP_IMAGE_TAG
 unset PRIVACY_NOTICE_VERSION PRIVACY_NOTICE_TEXT
 unset PARTICIPANT_SESSION_MINUTES PARTICIPANT_REGISTRATION_LIMIT PARTICIPANT_SUBMISSION_LIMIT
 unset ADMIN_SESSION_MINUTES ADMIN_LOGIN_LIMIT
 umask 077
 password="$(openssl rand -hex 32)"
+root_password="$(openssl rand -hex 32)"
 cat > "$test_dir/production.env" <<EOF
 SITE_ADDRESS=localhost
 HTTP_BIND_ADDRESS=127.0.0.1
 HTTP_PORT=0
 HTTPS_PORT=0
 APP_IMAGE_TAG=$project
-POSTGRES_DB=iseday_production_test
-POSTGRES_USER=iseday
-POSTGRES_PASSWORD=$password
-DATABASE_URL=postgresql+psycopg://iseday:$password@db:5432/iseday_production_test
+MYSQL_DATABASE=iseday_production_test
+MYSQL_USER=iseday
+MYSQL_PASSWORD=$password
+MYSQL_ROOT_PASSWORD=$root_password
+DATABASE_URL=mysql+pymysql://iseday:$password@db:3306/iseday_production_test?charset=utf8mb4
 PRIVACY_NOTICE_VERSION=test-v1
 PRIVACY_NOTICE_TEXT=Ensaio de produção. Use apenas dados fictícios.
 EOF
-unset password
+unset password root_password
 "${compose[@]}" config --quiet
 "${compose[@]}" up --build --detach --wait --wait-timeout 120
 
@@ -94,9 +96,10 @@ finally:
 PY
 
 # Exercita o procedimento documentado de backup e restauração em uma base nova.
-"${compose[@]}" exec -T db sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$test_dir/quiz.dump"
-"${compose[@]}" exec -T db sh -c 'exec createdb -U "$POSTGRES_USER" iseday_restore_check'
-"${compose[@]}" exec -T db sh -c 'exec pg_restore -U "$POSTGRES_USER" -d iseday_restore_check --exit-on-error --single-transaction' < "$test_dir/quiz.dump"
-restored_count="$("${compose[@]}" exec -T db sh -c 'exec psql -U "$POSTGRES_USER" -d iseday_restore_check -Atc "SELECT count(*) FROM participations"')"
-[[ "$restored_count" == 1 ]]
+"${compose[@]}" exec -T db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysqldump -u "$MYSQL_USER" --single-transaction --no-tablespaces --set-gtid-purged=OFF --triggers "$MYSQL_DATABASE"' > "$test_dir/quiz.sql"
+"${compose[@]}" exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root -e "CREATE DATABASE iseday_restore_check CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin"'
+"${compose[@]}" exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root iseday_restore_check' < "$test_dir/quiz.sql"
+restored_count="$("${compose[@]}" exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root -N iseday_restore_check -e "SELECT count(*) FROM participations"')"
+restored_triggers="$("${compose[@]}" exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root -N iseday_restore_check -e "SHOW TRIGGERS"' | wc -l)"
+[[ "$restored_count" == 1 && "$restored_triggers" -eq 26 ]]
 printf '%s\n' 'Ensaio de produção aprovado: HTTPS, navegador, cookies, persistência e restauração.'

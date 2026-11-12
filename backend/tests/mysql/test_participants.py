@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from threading import Barrier
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -7,20 +7,18 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, event, func, select, text, update
+from sqlalchemy import event, func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db import get_session
 from app.main import create_app
 from app.models import (
-    Course,
     Participation,
     ParticipationAreaResult,
     ParticipationCourseResult,
     ParticipationFeedback,
     ParticipationSelection,
-    StatementCourseWeight,
 )
 from app.participants import service
 from app.participants.security import token_hash
@@ -29,7 +27,7 @@ from app.scoring import ScoringConfigurationError
 from .conftest import migration_config
 from .helpers import catalog
 
-pytestmark = pytest.mark.postgres
+pytestmark = pytest.mark.mysql
 WRITE = {"X-Quiz-Request": "1"}
 
 
@@ -38,23 +36,10 @@ def api(empty_database, request):
     engine = empty_database
     with engine.begin() as db:
         command.upgrade(migration_config(db), "head")
-        quiz = catalog(db)
-        options = getattr(request, "param", {})
-        if "course_destination" in options:
-            destination, instructions = options["course_destination"]
-            db.execute(text("ALTER TABLE courses DISABLE TRIGGER USER"))
-            db.execute(
-                update(Course)
-                .where(Course.id == quiz.courses[0])
-                .values(
-                    destination=destination,
-                    destination_instructions=instructions,
-                )
-            )
-            db.execute(text("ALTER TABLE courses ENABLE TRIGGER USER"))
+    quiz = catalog(engine, **getattr(request, "param", {}))
     settings = Settings(
         app_env="test",
-        database_url="postgresql+psycopg://unused:unused@localhost/unused_test",
+        database_url="mysql+pymysql://unused:unused@localhost/unused_test",
         privacy_notice_version="test-v1",
         privacy_notice_text="Test notice. Use fictional data.",
         _env_file=None,
@@ -81,6 +66,19 @@ def api(empty_database, request):
             quiz=quiz,
             payload=payload,
             settings=settings,
+        )
+
+
+def expire_participant(api, participant_id):
+    with api.engine.begin() as db:
+        participant_id = UUID(participant_id)
+        started_at = db.scalar(
+            select(Participation.started_at).where(Participation.id == participant_id)
+        )
+        db.execute(
+            update(Participation)
+            .where(Participation.id == participant_id)
+            .values(access_expires_at=started_at + timedelta(microseconds=1))
         )
 
 
@@ -196,12 +194,7 @@ def test_contact_recovery_renews_session_and_preserves_participation(api, status
         saved = api.client.get("/api/participations/me/result").json()
     old_token = api.client.cookies.get("iseday_participant")
     # Recovery must also work after expiration, without the original cookie.
-    with api.engine.begin() as db:
-        db.execute(
-            update(Participation)
-            .where(Participation.id == UUID(first["id"]))
-            .values(access_expires_at=Participation.started_at + timedelta(microseconds=1))
-        )
+    expire_participant(api, first["id"])
     with TestClient(api.app) as other:
         response = other.post(
             "/api/participations/resume", headers=WRITE, json={contact: api.payload[contact]}
@@ -358,7 +351,7 @@ def test_failure_after_selections_rolls_back_all_writes(api):
     def fail(conn, cursor, statement, parameters, context, executemany):
         if statement.startswith("INSERT INTO participation_area_results"):
             # A genuine database error after the selection INSERTs, with no detail leak.
-            conn.exec_driver_sql("SELECT 1 / 0 /* private-database-detail */")
+            conn.exec_driver_sql("SELECT `private-database-detail`")
 
     event.listen(api.engine, "before_cursor_execute", fail)
     try:
@@ -408,8 +401,8 @@ def test_expiry_revocation_and_idempotent_end_preserve_history(api):
             update(Participation)
             .where(Participation.id == UUID(second["id"]))
             .values(
-                started_at=func.clock_timestamp() - timedelta(hours=2),
-                access_expires_at=func.clock_timestamp() - timedelta(hours=1),
+                started_at=datetime.now(UTC) - timedelta(hours=2),
+                access_expires_at=datetime.now(UTC) - timedelta(hours=1),
             )
         )
     assert api.client.get("/api/participations/me").status_code == 401
@@ -550,15 +543,8 @@ def test_agreement_without_course_refers_to_all_saved_recommendations(api):
     assert feedback_count(api) == 1
 
 
+@pytest.mark.parametrize("api", [{"single_recommendation": True}], indirect=True)
 def test_agreement_without_course_refers_to_the_single_recommendation(api):
-    with api.engine.begin() as db:
-        db.execute(text("ALTER TABLE statement_course_weights DISABLE TRIGGER USER"))
-        db.execute(
-            delete(StatementCourseWeight).where(
-                StatementCourseWeight.course_id == api.quiz.courses[2]
-            )
-        )
-        db.execute(text("ALTER TABLE statement_course_weights ENABLE TRIGGER USER"))
     register(api)
     submit(api)
     response = confirm(api)
@@ -630,14 +616,7 @@ def test_feedback_requires_submission_and_valid_session(api):
     registered = register(api).json()
     assert confirm(api, agrees=False).status_code == 409
     submit(api)
-    with api.engine.begin() as db:
-        db.execute(
-            update(Participation)
-            .where(Participation.id == UUID(registered["id"]))
-            .values(
-                access_expires_at=Participation.started_at + timedelta(microseconds=1),
-            )
-        )
+    expire_participant(api, registered["id"])
     assert confirm(api, agrees=False).status_code == 401
     api.client.post("/api/participations/me/end", headers=WRITE)
     assert confirm(api, agrees=False).status_code == 401
@@ -650,7 +629,7 @@ def test_feedback_rollback_after_insert_preserves_submitted_state(api):
 
     def fail(conn, cursor, statement, parameters, context, executemany):
         if statement.startswith("UPDATE participations SET") and "completed_at" in statement:
-            conn.exec_driver_sql("SELECT 1 / 0 /* private-feedback-failure */")
+            conn.exec_driver_sql("SELECT `private-feedback-failure`")
 
     event.listen(api.engine, "before_cursor_execute", fail)
     try:

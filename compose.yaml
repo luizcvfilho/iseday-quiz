@@ -3,26 +3,29 @@ name: iseday-quiz
 # Ambiente de desenvolvimento. Credenciais locais definidas em .env.
 services:
   db:
-    image: postgres:17
+    image: mysql:8.4
+    command: ["--log-bin-trust-function-creators=ON"]
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:?Copie .env.example para .env}
-      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+      MYSQL_ROOT_HOST: localhost
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Defina MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?Copie .env.example para .env}
+      MYSQL_USER: ${MYSQL_USER:?Defina MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Defina MYSQL_PASSWORD}
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: [CMD-SHELL, 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -e "SELECT 1"']
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
 
   api:
     build: ./backend
     environment:
       APP_ENV: development
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}?charset=utf8mb4
       PRIVACY_NOTICE_VERSION: ${PRIVACY_NOTICE_VERSION:-}
       PRIVACY_NOTICE_TEXT: ${PRIVACY_NOTICE_TEXT:-}
       PARTICIPANT_SESSION_MINUTES: ${PARTICIPANT_SESSION_MINUTES:-60}
@@ -53,4 +56,4 @@ services:
       - api
 
 volumes:
-  postgres_data:
+  mysql_data:

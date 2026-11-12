@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from app.db import database_now
 from app.models import (
     Area,
     Course,
@@ -16,19 +17,14 @@ from app.models import (
     StatementCourseWeight,
 )
 
-from .helpers import catalog, feedback, participation, results, selections, submit
+from .helpers import feedback, participation, results, selections, submit
 
-pytestmark = pytest.mark.postgres
-
-
-@pytest.fixture
-def quiz(db):
-    return catalog(db)
+pytestmark = pytest.mark.mysql
 
 
 @pytest.fixture
-def draft(db, quiz):
-    return participation(db, quiz)
+def draft(db):
+    return participation(db)
 
 
 @pytest.fixture
@@ -55,6 +51,15 @@ def test_submission_requires_exactly_25_and_rolls_back_partial_writes(db, quiz, 
     assert db.scalar(select(Participation.status)) == "draft"
 
 
+def test_phone_format_rejects_a_trailing_line_break(db, draft):
+    # MySQL's regexp end anchor can match before a trailing line break.
+    rejects(
+        db,
+        update(Participation).where(Participation.id == draft).values(phone="+552299999999\n"),
+        "ck_participations_phone_format",
+    )
+
+
 def test_duplicate_selection_rejected(db, quiz, draft):
     selections(db, quiz, draft)
     rejects(
@@ -63,7 +68,7 @@ def test_duplicate_selection_rejected(db, quiz, draft):
             participation_id=draft,
             statement_id=quiz.statements[0],
         ),
-        "duplicate key",
+        "Duplicate entry",
         IntegrityError,
     )
 
@@ -179,9 +184,7 @@ def test_feedback_disagreement_rejects_a_course(db, quiz, submitted):
 
 def test_feedback_allows_agreement_without_a_course(db, submitted):
     feedback(db, submitted, agrees=True)
-    db.execute(
-        update(Participation).values(status="completed", completed_at=func.clock_timestamp())
-    )
+    db.execute(update(Participation).values(status="completed", completed_at=database_now()))
     assert db.scalar(select(ParticipationFeedback.agrees_with_result)) is True
     assert db.scalar(select(ParticipationFeedback.chosen_course_id)) is None
 
@@ -189,7 +192,7 @@ def test_feedback_allows_agreement_without_a_course(db, submitted):
 def test_completion_requires_feedback(db, submitted):
     rejects(
         db,
-        update(Participation).values(status="completed", completed_at=func.clock_timestamp()),
+        update(Participation).values(status="completed", completed_at=database_now()),
         "requires feedback",
     )
 
@@ -199,7 +202,7 @@ def test_feedback_is_immutable_and_supports_controlled_retention(db, quiz, submi
     feedback(db, submitted, course=quiz.courses[0] if agrees else None, agrees=agrees)
     db.execute(
         update(Participation).values(
-            status="completed", completed_at=func.clock_timestamp(), access_token_hash=None
+            status="completed", completed_at=database_now(), access_token_hash=None
         )
     )
     rejects(
@@ -212,7 +215,7 @@ def test_feedback_is_immutable_and_supports_controlled_retention(db, quiz, submi
     rejects(db, delete(ParticipationFeedback), "controlled retention")
     rejects(
         db,
-        update(Participation).values(completed_at=func.clock_timestamp()),
+        update(Participation).values(completed_at=database_now()),
         "details are immutable",
     )
     db.execute(delete(Participation).where(Participation.id == submitted))
@@ -234,7 +237,7 @@ def test_feedback_is_immutable_and_supports_controlled_retention(db, quiz, submi
         {"email": "changed@example.org"},
         {"phone": "+5511988888888"},
         {"privacy_notice_version": "other"},
-        {"submitted_at": func.clock_timestamp()},
+        {"submitted_at": database_now()},
     ],
 )
 def test_submitted_registration_is_immutable(db, submitted, values):
@@ -245,12 +248,12 @@ def test_submitted_registration_is_immutable(db, submitted, values):
 def test_no_backward_or_skipped_state_transition(db, draft):
     rejects(
         db,
-        update(Participation).values(status="completed", completed_at=func.clock_timestamp()),
+        update(Participation).values(status="completed", completed_at=database_now()),
         "Invalid participation state transition",
     )
     rejects(
         db,
-        update(Participation).values(id=func.gen_random_uuid()),
+        update(Participation).values(id=uuid4()),
         "identity cannot change",
     )
 
@@ -258,21 +261,16 @@ def test_no_backward_or_skipped_state_transition(db, draft):
 def test_admin_email_uniqueness_is_case_insensitive(db):
     db.execute(
         text(
-            "INSERT INTO admin_users (name,email,password_hash) "
-            "VALUES ('Admin','Admin@example.org','hash')"
+            "INSERT INTO admin_users (id,name,email,password_hash) "
+            "VALUES ('00000000000000000000000000000001','Admin','Admin@example.org','hash')"
         )
     )
     rejects(
         db,
         text(
-            "INSERT INTO admin_users (name,email,password_hash) "
-            "VALUES ('Other','admin@example.org','hash')"
+            "INSERT INTO admin_users (id,name,email,password_hash) "
+            "VALUES ('00000000000000000000000000000002','Other','admin@example.org','hash')"
         ),
-        "duplicate key",
+        "Duplicate entry",
         IntegrityError,
     )
-
-
-@pytest.mark.parametrize("table", ["areas", "courses", "statements", "statement_course_weights"])
-def test_fixed_catalog_cannot_be_truncated(db, table):
-    rejects(db, text(f"TRUNCATE {table} CASCADE"), "fixed and cannot be changed")

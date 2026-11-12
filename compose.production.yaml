@@ -3,7 +3,7 @@ name: iseday-quiz-production
 x-api: &api
   image: iseday-quiz-production-api:${APP_IMAGE_TAG:-latest}
   build: ./backend
-  environment:
+  environment: &api-environment
     APP_ENV: production
     DATABASE_URL: ${DATABASE_URL:?Defina DATABASE_URL em .env.production}
     PRIVACY_NOTICE_VERSION: ${PRIVACY_NOTICE_VERSION:?Defina a versão do aviso institucional}
@@ -22,36 +22,18 @@ x-api: &api
       max-file: "3"
 
 services:
-  db:
-    image: postgres:17
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina uma senha exclusiva de produção}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - backend
-    healthcheck:
-      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    logging: *logging
-
   migrate:
     <<: *api
     restart: "no"
+    environment:
+      <<: *api-environment
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:-${DATABASE_URL:?Defina DATABASE_URL em .env.production}}
     command: [/app/.venv/bin/alembic, upgrade, head]
-    depends_on:
-      db:
-        condition: service_healthy
 
   api:
     <<: *api
     restart: unless-stopped
-    # A API é acessível apenas na rede Docker interna, sem porta publicada no host.
+    # A API é acessível apenas na rede Docker privada, sem porta publicada no host.
     # O Caddy descarta X-Forwarded-* fornecidos pelo cliente antes de encaminhar.
     # Um único worker mantém os limites de requisições consistentes por processo.
     command:
@@ -68,8 +50,6 @@ services:
       - --forwarded-allow-ips=*
       - --no-access-log
     depends_on:
-      db:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     healthcheck:
@@ -107,9 +87,8 @@ services:
 
 networks:
   backend:
-    internal: true
+    driver: bridge
 
 volumes:
-  postgres_data:
   caddy_data:
   caddy_config:

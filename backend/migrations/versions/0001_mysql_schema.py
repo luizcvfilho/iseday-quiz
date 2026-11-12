@@ -1,6 +1,6 @@
 """Create the current quiz schema and install the fixed catalog.
 
-Revision ID: 0001
+Revision ID: 0001_mysql
 Revises:
 """
 
@@ -10,69 +10,76 @@ from uuid import UUID, uuid5
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects.mysql import DATETIME
 
-revision = "0001"
+revision = "0001_mysql"
 down_revision = None
 branch_labels = None
 depends_on = None
 
+MYSQL_TABLE = {
+    "mysql_engine": "InnoDB",
+    "mysql_charset": "utf8mb4",
+    "mysql_collate": "utf8mb4_0900_bin",
+}
 CATALOG_NAMESPACE = UUID("3cc0ba4e-e328-4e57-b5ee-b01568c47758")
 
 
 def upgrade() -> None:
     op.create_table(
         "admin_users",
-        sa.Column("name", sa.Text(), nullable=False),
-        sa.Column("email", sa.Text(), nullable=False),
+        sa.CheckConstraint("is_active IN (0, 1)", name=op.f("ck_admin_users_is_active_boolean")),
+        sa.Column("name", sa.String(255), nullable=False),
+        sa.Column("email", sa.String(254, collation="utf8mb4_0900_as_ci"), nullable=False),
         sa.Column("password_hash", sa.Text(), nullable=False),
-        sa.Column("is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
-        sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("1"), nullable=False),
+        sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column(
             "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            DATETIME(fsp=6),
+            server_default=sa.text("(UTC_TIMESTAMP(6))"),
             nullable=False,
         ),
-        sa.CheckConstraint("btrim(email) <> ''", name=op.f("ck_admin_users_email_nonempty")),
-        sa.CheckConstraint("btrim(name) <> ''", name=op.f("ck_admin_users_name_nonempty")),
+        sa.CheckConstraint("trim(email) <> ''", name=op.f("ck_admin_users_email_nonempty")),
+        sa.CheckConstraint("trim(name) <> ''", name=op.f("ck_admin_users_name_nonempty")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_admin_users")),
-    )
-    op.create_index(
-        "uq_admin_users_email", "admin_users", [sa.literal_column("lower(email)")], unique=True
+        sa.UniqueConstraint("email", name=op.f("uq_admin_users_email")),
+        **MYSQL_TABLE,
     )
     op.create_table(
         "areas",
-        sa.Column("name", sa.Text(), nullable=False),
+        sa.Column("name", sa.String(255), nullable=False),
         sa.Column("destination", sa.Text(), nullable=False),
         sa.Column("destination_instructions", sa.Text(), nullable=False),
-        sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
-        sa.CheckConstraint("btrim(destination) <> ''", name=op.f("ck_areas_destination_nonempty")),
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.CheckConstraint("trim(destination) <> ''", name=op.f("ck_areas_destination_nonempty")),
         sa.CheckConstraint(
-            "btrim(destination_instructions) <> ''", name=op.f("ck_areas_instructions_nonempty")
+            "trim(destination_instructions) <> ''", name=op.f("ck_areas_instructions_nonempty")
         ),
-        sa.CheckConstraint("btrim(name) <> ''", name=op.f("ck_areas_name_nonempty")),
+        sa.CheckConstraint("trim(name) <> ''", name=op.f("ck_areas_name_nonempty")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_areas")),
         sa.UniqueConstraint("name", name=op.f("uq_areas_name")),
+        **MYSQL_TABLE,
     )
     op.create_table(
         "participations",
-        sa.Column("school_name", sa.Text(), nullable=False),
+        sa.Column("school_name", sa.String(200), nullable=False),
         sa.Column("full_name", sa.Text(), nullable=False),
         sa.Column("phone", sa.String(length=14), nullable=False),
         sa.Column("email", sa.Text(), nullable=False),
         sa.Column("privacy_notice_version", sa.Text(), nullable=False),
-        sa.Column("status", sa.Text(), server_default=sa.text("'draft'"), nullable=False),
-        sa.Column("access_token_hash", sa.Text(), nullable=True),
-        sa.Column("access_expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("status", sa.String(9), server_default=sa.text("'draft'"), nullable=False),
+        sa.Column("access_token_hash", sa.String(64), nullable=True),
+        sa.Column("access_expires_at", DATETIME(fsp=6), nullable=False),
         sa.Column(
             "started_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            DATETIME(fsp=6),
+            server_default=sa.text("(UTC_TIMESTAMP(6))"),
             nullable=False,
         ),
-        sa.Column("submitted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("submitted_at", DATETIME(fsp=6), nullable=True),
+        sa.Column("completed_at", DATETIME(fsp=6), nullable=True),
+        sa.Column("id", sa.Uuid(), nullable=False),
         sa.CheckConstraint(
             "(status = 'completed') = (completed_at IS NOT NULL)",
             name=op.f("ck_participations_completion_timestamp_matches_status"),
@@ -83,21 +90,23 @@ def upgrade() -> None:
             name=op.f("ck_participations_submission_timestamp_matches_status"),
         ),
         sa.CheckConstraint(
-            "access_token_hash ~ '^[0-9a-f]{64}$'", name=op.f("ck_participations_token_hash_format")
+            "access_token_hash REGEXP '^[0-9a-f]{64}$'",
+            name=op.f("ck_participations_token_hash_format"),
         ),
-        sa.CheckConstraint("btrim(email) <> ''", name=op.f("ck_participations_email_nonempty")),
+        sa.CheckConstraint("trim(email) <> ''", name=op.f("ck_participations_email_nonempty")),
         sa.CheckConstraint(
-            "btrim(full_name) <> ''", name=op.f("ck_participations_full_name_nonempty")
+            "trim(full_name) <> ''", name=op.f("ck_participations_full_name_nonempty")
         ),
         sa.CheckConstraint(
-            "btrim(privacy_notice_version) <> ''",
+            "trim(privacy_notice_version) <> ''",
             name=op.f("ck_participations_privacy_notice_nonempty"),
         ),
         sa.CheckConstraint(
-            "btrim(school_name) <> ''", name=op.f("ck_participations_school_name_nonempty")
+            "trim(school_name) <> ''", name=op.f("ck_participations_school_name_nonempty")
         ),
         sa.CheckConstraint(
-            "phone ~ '^\\+55[1-9][0-9][0-9]{8,9}$'", name=op.f("ck_participations_phone_format")
+            "phone REGEXP '^[+]55[1-9][0-9][0-9]{8,9}$' AND RIGHT(phone, 1) BETWEEN '0' AND '9'",
+            name=op.f("ck_participations_phone_format"),
         ),
         sa.CheckConstraint(
             "status IN ('draft', 'submitted', 'completed')",
@@ -116,23 +125,24 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_participations")),
         sa.UniqueConstraint("access_token_hash", name=op.f("uq_participations_access_token_hash")),
+        **MYSQL_TABLE,
     )
     op.create_index(
         "ix_participations_school",
         "participations",
-        ["school_name", sa.literal_column("started_at DESC")],
+        ["school_name", "started_at"],
         unique=False,
     )
     op.create_index(
         "ix_participations_started",
         "participations",
-        [sa.literal_column("started_at DESC"), "id"],
+        ["started_at", "id"],
         unique=False,
     )
     op.create_index(
         "ix_participations_status",
         "participations",
-        ["status", sa.literal_column("started_at DESC")],
+        ["status", "started_at"],
         unique=False,
     )
     op.create_table(
@@ -140,27 +150,28 @@ def upgrade() -> None:
         sa.Column("source_number", sa.SmallInteger(), nullable=False),
         sa.Column("display_order", sa.SmallInteger(), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
-        sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
-        sa.CheckConstraint("btrim(text) <> ''", name=op.f("ck_statements_text_nonempty")),
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.CheckConstraint("trim(text) <> ''", name=op.f("ck_statements_text_nonempty")),
         sa.CheckConstraint("display_order > 0", name=op.f("ck_statements_display_order_positive")),
         sa.CheckConstraint("source_number > 0", name=op.f("ck_statements_source_number_positive")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_statements")),
         sa.UniqueConstraint("display_order", name=op.f("uq_statements_display_order")),
         sa.UniqueConstraint("source_number", name=op.f("uq_statements_source_number")),
+        **MYSQL_TABLE,
     )
     op.create_table(
         "admin_audit_logs",
-        sa.Column("id", sa.BigInteger(), sa.Identity(always=True), nullable=False),
+        sa.Column("id", sa.BigInteger(), nullable=False),
         sa.Column("admin_user_id", sa.Uuid(), nullable=True),
         sa.Column("action", sa.Text(), nullable=False),
         sa.Column("target_participation_id", sa.Uuid(), nullable=True),
         sa.Column(
             "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            DATETIME(fsp=6),
+            server_default=sa.text("(UTC_TIMESTAMP(6))"),
             nullable=False,
         ),
-        sa.CheckConstraint("btrim(action) <> ''", name=op.f("ck_admin_audit_logs_action_nonempty")),
+        sa.CheckConstraint("trim(action) <> ''", name=op.f("ck_admin_audit_logs_action_nonempty")),
         sa.ForeignKeyConstraint(
             ["admin_user_id"],
             ["admin_users.id"],
@@ -168,28 +179,29 @@ def upgrade() -> None:
             ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_admin_audit_logs")),
+        **MYSQL_TABLE,
     )
     op.create_index(
         "ix_admin_audit_logs_created",
         "admin_audit_logs",
-        [sa.literal_column("created_at DESC")],
+        ["created_at"],
         unique=False,
     )
     op.create_table(
         "admin_sessions",
         sa.Column("admin_user_id", sa.Uuid(), nullable=False),
-        sa.Column("token_hash", sa.Text(), nullable=False),
-        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("token_hash", sa.String(64), nullable=False),
+        sa.Column("expires_at", DATETIME(fsp=6), nullable=False),
+        sa.Column("revoked_at", DATETIME(fsp=6), nullable=True),
+        sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column(
             "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            DATETIME(fsp=6),
+            server_default=sa.text("(UTC_TIMESTAMP(6))"),
             nullable=False,
         ),
         sa.CheckConstraint(
-            "token_hash ~ '^[0-9a-f]{64}$'", name=op.f("ck_admin_sessions_token_hash_format")
+            "token_hash REGEXP '^[0-9a-f]{64}$'", name=op.f("ck_admin_sessions_token_hash_format")
         ),
         sa.CheckConstraint(
             "expires_at > created_at", name=op.f("ck_admin_sessions_expiry_after_creation")
@@ -202,30 +214,35 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_admin_sessions")),
         sa.UniqueConstraint("token_hash", name=op.f("uq_admin_sessions_token_hash")),
+        **MYSQL_TABLE,
     )
     op.create_index("ix_admin_sessions_user", "admin_sessions", ["admin_user_id"], unique=False)
     op.create_table(
         "courses",
         sa.Column("area_id", sa.Uuid(), nullable=False),
-        sa.Column("name", sa.Text(), nullable=False),
+        sa.Column("name", sa.String(255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("destination", sa.Text(), nullable=True),
         sa.Column("destination_instructions", sa.Text(), nullable=True),
-        sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("id", sa.Uuid(), nullable=False),
         sa.CheckConstraint(
             "(destination IS NULL AND destination_instructions IS NULL) OR "
-            "(destination IS NOT NULL AND btrim(destination) <> '' AND "
-            "destination_instructions IS NOT NULL AND btrim(destination_instructions) <> '')",
+            "(destination IS NOT NULL AND trim(destination) <> '' AND "
+            "destination_instructions IS NOT NULL AND trim(destination_instructions) <> '')",
             name=op.f("ck_courses_destination_pair"),
         ),
-        sa.CheckConstraint("btrim(name) <> ''", name=op.f("ck_courses_name_nonempty")),
+        sa.CheckConstraint("trim(name) <> ''", name=op.f("ck_courses_name_nonempty")),
         sa.ForeignKeyConstraint(["area_id"], ["areas.id"], name=op.f("fk_courses_area_id_areas")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_courses")),
         sa.UniqueConstraint("name", name=op.f("uq_courses_name")),
+        **MYSQL_TABLE,
     )
     op.create_index("ix_courses_area", "courses", ["area_id"], unique=False)
     op.create_table(
         "participation_area_results",
+        sa.CheckConstraint(
+            "is_winner IN (0, 1)", name=op.f("ck_participation_area_results_is_winner_boolean")
+        ),
         sa.Column("participation_id", sa.Uuid(), nullable=False),
         sa.Column("area_id", sa.Uuid(), nullable=False),
         sa.Column("score", sa.SmallInteger(), nullable=False),
@@ -248,13 +265,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint(
             "participation_id", "area_id", name=op.f("pk_participation_area_results")
         ),
+        **MYSQL_TABLE,
     )
     op.create_index(
         "ix_area_winners",
         "participation_area_results",
-        ["area_id", "participation_id"],
+        ["area_id", "is_winner", "participation_id"],
         unique=False,
-        postgresql_where=sa.text("is_winner"),
     )
     op.create_table(
         "participation_selections",
@@ -274,9 +291,14 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint(
             "participation_id", "statement_id", name=op.f("pk_participation_selections")
         ),
+        **MYSQL_TABLE,
     )
     op.create_table(
         "participation_course_results",
+        sa.CheckConstraint(
+            "is_recommended IN (0, 1)",
+            name=op.f("ck_participation_course_results_is_recommended_boolean"),
+        ),
         sa.Column("participation_id", sa.Uuid(), nullable=False),
         sa.Column("course_id", sa.Uuid(), nullable=False),
         sa.Column("score", sa.Integer(), nullable=False),
@@ -302,13 +324,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint(
             "participation_id", "course_id", name=op.f("pk_participation_course_results")
         ),
+        **MYSQL_TABLE,
     )
     op.create_index(
         "ix_course_recommendations",
         "participation_course_results",
-        ["course_id", "participation_id"],
+        ["course_id", "is_recommended", "participation_id"],
         unique=False,
-        postgresql_where=sa.text("is_recommended"),
     )
     op.create_table(
         "statement_course_weights",
@@ -329,10 +351,15 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint(
             "statement_id", "course_id", name=op.f("pk_statement_course_weights")
         ),
+        **MYSQL_TABLE,
     )
     op.create_index("ix_weights_course", "statement_course_weights", ["course_id"], unique=False)
     op.create_table(
         "participation_feedback",
+        sa.CheckConstraint(
+            "agrees_with_result IN (0, 1)",
+            name=op.f("ck_participation_feedback_agrees_with_result_boolean"),
+        ),
         sa.Column("participation_id", sa.Uuid(), nullable=False),
         sa.Column("agrees_with_result", sa.Boolean(), nullable=False),
         sa.Column("chosen_course_id", sa.Uuid(), nullable=True),
@@ -340,20 +367,16 @@ def upgrade() -> None:
         sa.Column("destination_instructions", sa.Text(), nullable=False),
         sa.Column(
             "answered_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            DATETIME(fsp=6),
+            server_default=sa.text("(UTC_TIMESTAMP(6))"),
             nullable=False,
         ),
         sa.CheckConstraint(
-            "btrim(destination) <> ''", name=op.f("ck_participation_feedback_destination_nonempty")
+            "trim(destination) <> ''", name=op.f("ck_participation_feedback_destination_nonempty")
         ),
         sa.CheckConstraint(
-            "btrim(destination_instructions) <> ''",
+            "trim(destination_instructions) <> ''",
             name=op.f("ck_participation_feedback_instructions_nonempty"),
-        ),
-        sa.CheckConstraint(
-            "agrees_with_result OR chosen_course_id IS NULL",
-            name=op.f("ck_participation_feedback_agreement_matches_course"),
         ),
         sa.ForeignKeyConstraint(
             ["participation_id", "chosen_course_id"],
@@ -361,7 +384,8 @@ def upgrade() -> None:
                 "participation_course_results.participation_id",
                 "participation_course_results.course_id",
             ],
-            name=op.f("fk_participation_feedback_participation_id_participation_course_results"),
+            name=op.f("fk_feedback_recommended_result"),
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["participation_id"],
@@ -370,9 +394,14 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("participation_id", name=op.f("pk_participation_feedback")),
+        **MYSQL_TABLE,
     )
 
-    op.execute(Path(__file__).with_name("0001_integrity.sql").read_text(encoding="utf-8"))
+    seed_catalog()
+    install_triggers()
+
+
+def seed_catalog() -> None:
     report = json.loads(
         (Path(__file__).resolve().parents[2] / "catalog" / "quiz-final.json").read_text(
             encoding="utf-8"
@@ -455,22 +484,22 @@ def upgrade() -> None:
             for name in s["courses"]
         ],
     )
-    op.execute("""
-        CREATE FUNCTION guard_fixed_catalog() RETURNS trigger LANGUAGE plpgsql AS $$
-        BEGIN
-            RAISE EXCEPTION 'The quiz catalog is fixed and cannot be changed';
-        END;
-        $$;
-    """)
-    for table in ("areas", "courses", "statements", "statement_course_weights"):
-        op.execute(f"""
-            CREATE TRIGGER guard_fixed_{table}
-            BEFORE INSERT OR UPDATE OR DELETE ON {table}
-            FOR EACH ROW EXECUTE FUNCTION guard_fixed_catalog();
-            CREATE TRIGGER guard_truncate_{table}
-            BEFORE TRUNCATE ON {table}
-            FOR EACH STATEMENT EXECUTE FUNCTION guard_fixed_catalog();
-        """)
+
+
+def install_triggers() -> None:
+    # One CREATE TRIGGER per driver call. DELIMITER is a client command for offline SQL.
+    context = op.get_context()
+    statements = Path(__file__).with_name("0001_mysql_integrity.sql").read_text(encoding="utf-8")
+    if context.as_sql:
+        context.impl.static_output("DELIMITER $$")
+    for statement in statements.split("$$"):
+        if statement.strip():
+            if context.as_sql:
+                context.impl.static_output(f"{statement.strip()}$$")
+            else:
+                op.execute(statement.strip())
+    if context.as_sql:
+        context.impl.static_output("DELIMITER ;")
 
 
 def downgrade() -> None:
@@ -486,11 +515,3 @@ def downgrade() -> None:
     op.drop_table("participations")
     op.drop_table("areas")
     op.drop_table("admin_users")
-    # Dropping tables removes their triggers; remove the trigger functions too.
-    for function in (
-        "guard_fixed_catalog",
-        "guard_feedback",
-        "guard_participation_state",
-        "guard_participation_children",
-    ):
-        op.execute(f"DROP FUNCTION {function}()")

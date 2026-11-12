@@ -10,7 +10,7 @@ from app.scoring import calculate_scores
 
 from .conftest import migration_config
 
-pytestmark = pytest.mark.postgres
+pytestmark = pytest.mark.mysql
 
 
 def test_migration_installs_the_fixed_catalog_and_repeated_upgrade_keeps_it(empty_database):

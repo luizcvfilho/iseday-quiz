@@ -15,7 +15,7 @@ from app.participants.security import token_hash
 from .test_participants import WRITE, confirm, register, submit
 from .test_participants import api as api
 
-pytestmark = pytest.mark.postgres
+pytestmark = pytest.mark.mysql
 PASSWORD = "a sufficiently long test password"
 
 

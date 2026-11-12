@@ -3,9 +3,10 @@ from secrets import token_urlsafe
 
 from fastapi import HTTPException
 from pwdlib import PasswordHash
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db import database_now
 from app.models import AdminAuditLog, AdminSession, AdminUser
 from app.participants.security import token_hash
 
@@ -31,7 +32,7 @@ def authenticate(session: Session, token: str | None) -> tuple[AdminUser, AdminS
             .where(
                 AdminSession.token_hash == hashed,
                 AdminSession.revoked_at.is_(None),
-                AdminSession.expires_at > func.clock_timestamp(),
+                AdminSession.expires_at > database_now(),
                 AdminUser.is_active.is_(True),
             )
         ).one_or_none()
@@ -42,7 +43,7 @@ def authenticate(session: Session, token: str | None) -> tuple[AdminUser, AdminS
 
 def login(session: Session, email: str, password: str, minutes: int, previous: str | None):
     user = session.scalar(
-        select(AdminUser).where(func.lower(AdminUser.email) == email.lower()).with_for_update()
+        select(AdminUser).where(AdminUser.email == email.lower()).with_for_update()
     )
     valid = passwords.verify(password, user.password_hash if user else DUMMY_HASH)
     if user is None or not valid or not user.is_active:

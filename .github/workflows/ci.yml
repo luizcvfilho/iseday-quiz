@@ -41,26 +41,26 @@ jobs:
         run: uv run --project backend --frozen ruff format --check backend
 
   backend:
-    name: Backend and PostgreSQL
+    name: Backend and MySQL
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
-      postgres:
-        image: postgres:17
+      mysql:
+        image: mysql:8.4
         env:
-          POSTGRES_DB: iseday_test
-          POSTGRES_USER: iseday
-          POSTGRES_PASSWORD: iseday_test
+          MYSQL_DATABASE: iseday_test
+          MYSQL_ROOT_PASSWORD: iseday_test
+          MYSQL_ROOT_HOST: '%'
         ports:
-          - 5432:5432
+          - 127.0.0.1:13306:3306
         options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U iseday -d iseday_test"
+          --health-cmd "MYSQL_PWD=iseday_test mysql -h 127.0.0.1 -u root iseday_test -e 'SELECT 1'"
           --health-interval 5s
           --health-timeout 3s
-          --health-retries 10
+          --health-retries 20
     env:
-      TEST_DATABASE_URL: postgresql+psycopg://iseday:iseday_test@127.0.0.1:5432/iseday_test
-      REQUIRE_POSTGRES_TESTS: "1"
+      TEST_DATABASE_URL: mysql+pymysql://root:iseday_test@127.0.0.1:13306/iseday_test
+      REQUIRE_MYSQL_TESTS: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -70,31 +70,35 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - name: Install dependencies
         run: uv sync --project backend --frozen
+      - name: Configure MySQL triggers
+        run: |
+          docker exec -e MYSQL_PWD=iseday_test "${{ job.services.mysql.id }}" mysql -u root \
+            -e "SET GLOBAL log_bin_trust_function_creators = ON"
       - name: Backend unit tests
-        run: uv run --project backend --frozen pytest backend/tests --ignore=backend/tests/postgres
-      - name: Backend PostgreSQL integration tests
-        run: uv run --project backend --frozen pytest backend/tests/postgres
+        run: uv run --project backend --frozen pytest backend/tests --ignore=backend/tests/mysql
+      - name: Backend MySQL integration tests
+        run: uv run --project backend --frozen pytest backend/tests/mysql
 
   browser:
     name: Frontend and browser integration
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
-      postgres:
-        image: postgres:17
+      mysql:
+        image: mysql:8.4
         env:
-          POSTGRES_DB: iseday_test
-          POSTGRES_USER: iseday
-          POSTGRES_PASSWORD: iseday_test
+          MYSQL_DATABASE: iseday_test
+          MYSQL_ROOT_PASSWORD: iseday_test
+          MYSQL_ROOT_HOST: '%'
         ports:
-          - 5432:5432
+          - 127.0.0.1:13306:3306
         options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U iseday -d iseday_test"
+          --health-cmd "MYSQL_PWD=iseday_test mysql -h 127.0.0.1 -u root iseday_test -e 'SELECT 1'"
           --health-interval 5s
           --health-timeout 3s
-          --health-retries 10
+          --health-retries 20
     env:
-      TEST_DATABASE_URL: postgresql+psycopg://iseday:iseday_test@127.0.0.1:5432/iseday_test
+      TEST_DATABASE_URL: mysql+pymysql://root:iseday_test@127.0.0.1:13306/iseday_test
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -111,6 +115,10 @@ jobs:
         run: |
           npm --prefix frontend ci
           uv sync --project backend --frozen
+      - name: Configure MySQL triggers
+        run: |
+          docker exec -e MYSQL_PWD=iseday_test "${{ job.services.mysql.id }}" mysql -u root \
+            -e "SET GLOBAL log_bin_trust_function_creators = ON"
       - name: Install Chromium and system dependencies
         working-directory: frontend
         run: npx playwright install --with-deps chromium
@@ -120,7 +128,7 @@ jobs:
         run: npm --prefix frontend run build:assets
       - name: Browser tests on the built app
         run: npm --prefix frontend run test:preview -- --workers=1
-      - name: Browser tests with real API and PostgreSQL
+      - name: Browser tests with real API and MySQL
         run: npm --prefix frontend run test:live -- --workers=1
       - name: Upload browser failure traces
         if: failure()

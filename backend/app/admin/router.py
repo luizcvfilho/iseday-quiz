@@ -65,7 +65,8 @@ def write_authorized(request: Request, session: Database):
             user, credential = security.authenticate(session, access_token(request))
             yield AdminAccess(session, user, credential)
     except DBAPIError as exc:
-        if getattr(exc.orig, "sqlstate", None) in ("40001", "40P01", "23505", "23514", "P0001"):
+        # Duplicate key, lock timeout/deadlock, check constraint or trigger rejection.
+        if exc.orig.args and exc.orig.args[0] in (1062, 1205, 1213, 3819, 1644):
             raise HTTPException(
                 409, "Os dados mudaram ou são inconsistentes. Atualize e tente novamente."
             ) from exc

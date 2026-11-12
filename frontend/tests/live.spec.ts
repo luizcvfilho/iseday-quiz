@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test('catálogo original: cadastro até encaminhamento com API e PostgreSQL reais', async ({
+test('catálogo original: cadastro até encaminhamento com API e MySQL reais', async ({
   page,
 }, testInfo) => {
   test.setTimeout(60_000)

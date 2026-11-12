@@ -3,7 +3,13 @@
 .PHONY: help env setup setup-browser setup-browser-deps hooks run up down logs db dev migrate check check-all check-db check-production prod-env prod-build prod-up prod-down prod-logs prod-admin
 
 PROD_ENV_FILE ?= .env.production
-PROD_COMPOSE = docker compose --env-file "$(PROD_ENV_FILE)" -f compose.production.yaml
+PROD_DB ?= bundled
+ifeq ($(PROD_DB),bundled)
+PROD_DB_COMPOSE = -f compose.production.mysql.yaml
+else ifneq ($(PROD_DB),external)
+$(error Use PROD_DB=bundled ou PROD_DB=external)
+endif
+PROD_COMPOSE = docker compose --env-file "$(PROD_ENV_FILE)" -f compose.production.yaml $(PROD_DB_COMPOSE)
 
 help:
 	@printf '%s\n' \
@@ -15,11 +21,11 @@ help:
 		'make setup-browser-deps Instala Chromium e bibliotecas de sistema (pode exigir sudo).' \
 		'make hooks     Instala o hook pre-commit neste clone.' \
 		'make dev       Inicia o banco, aplica migrações e inicia frontend/API locais.' \
-		'make db        Inicia somente o PostgreSQL e aguarda ficar pronto.' \
+		'make db        Inicia somente o MySQL e aguarda ficar pronto.' \
 		'make migrate   Aplica as migrações na API em execução no Docker.' \
 		'make check     Executa as verificações de frontend e backend locais.' \
 		'make check-all Executa todas as etapas do pre-commit, sem o ensaio de produção.' \
-		'make check-db  Executa os testes de integração PostgreSQL.' \
+		'make check-db  Executa os testes de integração MySQL.' \
 		'make check-production Testa produção com HTTPS e banco descartável.' \
 		'make prod-build Constrói as imagens de produção.' \
 		'make prod-up    Inicia produção e aplica migrações antes da API.' \

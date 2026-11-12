@@ -4,29 +4,39 @@ from time import monotonic, sleep
 
 import pytest
 from alembic import command
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import DBAPIError
 
+from app.db import database_now
 from app.models import Participation, ParticipationSelection
 
 from .conftest import migration_config
 from .helpers import catalog, participation, results, selections, submit
 
-pytestmark = pytest.mark.postgres
+pytestmark = pytest.mark.mysql
 
 
-def run_blocked_statement(engine, backend_pid, statement):
-    with engine.begin() as db:
-        db.execute(text("SET LOCAL statement_timeout = '5s'"))
-        backend_pid.put(db.scalar(text("SELECT pg_backend_pid()")))
-        db.execute(statement)
+def run_blocked_statement(engine, connection_id, statement):
+    with engine.connect().execution_options(isolation_level="REPEATABLE READ") as db:
+        db.execute(text("SET SESSION innodb_lock_wait_timeout = 5"))
+        # Pin the snapshot before the other writer commits, to verify current reads in the trigger.
+        db.scalar(select(func.count()).select_from(ParticipationSelection))
+        connection_id.put(db.scalar(text("SELECT CONNECTION_ID()")))
+        db.execute(statement.prefix_with("/* concurrent test */"))
+        db.commit()
 
 
-def assert_waits_for_lock(db, pid):
+def assert_waits_for_lock(db, connection_id, future):
     deadline = monotonic() + 3
     while monotonic() < deadline:
-        if db.scalar(text("SELECT cardinality(pg_blocking_pids(:pid)) > 0"), {"pid": pid}):
+        statement = db.scalar(
+            text("SELECT INFO FROM information_schema.PROCESSLIST WHERE ID = :connection_id"),
+            {"connection_id": connection_id},
+        )
+        if statement and "concurrent test" in statement and not future.done():
             return
+        if future.done():
+            break
         sleep(0.01)
     pytest.fail("Concurrent write did not wait for the parent row lock")
 
@@ -35,18 +45,17 @@ def assert_waits_for_lock(db, pid):
 def concurrent_database(empty_database):
     with empty_database.begin() as db:
         command.upgrade(migration_config(db), "head")
-    return empty_database
+    return empty_database, catalog(empty_database)
 
 
 def test_submission_waits_for_selection_write_and_rechecks_count(concurrent_database):
-    engine = concurrent_database
+    engine, quiz = concurrent_database
     with engine.begin() as db:
-        quiz = catalog(db)
-        participant = participation(db, quiz)
+        participant = participation(db)
         selections(db, quiz, participant)
         results(db, quiz, participant)
 
-    backend_pid = Queue()
+    connection_id = Queue()
     with ThreadPoolExecutor(max_workers=1) as executor:
         with engine.connect() as writer:
             transaction = writer.begin()
@@ -59,10 +68,10 @@ def test_submission_waits_for_selection_write_and_rechecks_count(concurrent_data
                 statement = (
                     update(Participation)
                     .where(Participation.id == participant)
-                    .values(status="submitted", submitted_at=text("clock_timestamp()"))
+                    .values(status="submitted", submitted_at=database_now())
                 )
-                future = executor.submit(run_blocked_statement, engine, backend_pid, statement)
-                assert_waits_for_lock(writer, backend_pid.get(timeout=3))
+                future = executor.submit(run_blocked_statement, engine, connection_id, statement)
+                assert_waits_for_lock(writer, connection_id.get(timeout=3), future)
             finally:
                 transaction.commit()
         with pytest.raises(DBAPIError, match="exactly 25.*24"):
@@ -72,22 +81,21 @@ def test_submission_waits_for_selection_write_and_rechecks_count(concurrent_data
 
 
 def test_submission_blocks_late_changes_to_results_and_selections(concurrent_database):
-    engine = concurrent_database
+    engine, quiz = concurrent_database
     with engine.begin() as db:
-        quiz = catalog(db)
-        participant = participation(db, quiz)
+        participant = participation(db)
         selections(db, quiz, participant)
         results(db, quiz, participant)
-    backend_pid = Queue()
+    connection_id = Queue()
     with ThreadPoolExecutor(max_workers=1) as executor:
         with engine.connect() as writer:
             transaction = writer.begin()
             try:
                 submit(writer, participant)
                 future = executor.submit(
-                    run_blocked_statement, engine, backend_pid, delete(ParticipationSelection)
+                    run_blocked_statement, engine, connection_id, delete(ParticipationSelection)
                 )
-                assert_waits_for_lock(writer, backend_pid.get(timeout=3))
+                assert_waits_for_lock(writer, connection_id.get(timeout=3), future)
             finally:
                 transaction.commit()
         with pytest.raises(DBAPIError, match="Submitted answers and results are immutable"):
