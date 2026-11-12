@@ -3,13 +3,7 @@
 .PHONY: help env setup setup-browser setup-browser-deps hooks run up down logs db dev migrate check check-all check-db check-production prod-env prod-build prod-up prod-down prod-logs prod-admin
 
 PROD_ENV_FILE ?= .env.production
-PROD_DB ?= bundled
-ifeq ($(PROD_DB),bundled)
-PROD_DB_COMPOSE = -f compose.production.mysql.yaml
-else ifneq ($(PROD_DB),external)
-$(error Use PROD_DB=bundled ou PROD_DB=external)
-endif
-PROD_COMPOSE = docker compose --env-file "$(PROD_ENV_FILE)" -f compose.production.yaml $(PROD_DB_COMPOSE)
+PROD_COMPOSE = docker compose --env-file "$(PROD_ENV_FILE)" -f compose.production.yaml
 
 help:
 	@printf '%s\n' \

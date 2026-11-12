@@ -12,14 +12,14 @@ Na raiz do repositório:
 cp .env.production.example .env.production
 chmod 600 .env.production
 openssl rand -hex 32  # senha da aplicação
-openssl rand -hex 32  # senha de root, se usar o MySQL do Compose
+openssl rand -hex 32  # senha de root do MySQL
 ```
 
 Edite `.env.production` antes de executar qualquer serviço:
 
 - `SITE_ADDRESS`: domínio, por exemplo `quiz.sua-instituicao.edu.br`, sem protocolo, caminho ou porta. Não use os domínios de exemplo em produção.
-- `DATABASE_URL`: `mysql+pymysql://USUARIO:SENHA@HOST:3306/iseday_quiz?charset=utf8mb4`. Use o host do MySQL fornecido pela produção ou `db` para o MySQL do Compose. Senhas com caracteres reservados exigem codificação de URL.
-- `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` e `MYSQL_ROOT_PASSWORD`: preencha só se usar o MySQL do Compose. Use o mesmo banco, usuário e senha da aplicação em `DATABASE_URL`, com outra senha para root.
+- Preencha `DATABASE_URL` no formato `mysql+pymysql://USUARIO:SENHA@db:3306/iseday_quiz?charset=utf8mb4`. O host `db` é o serviço MySQL no Compose. Senhas com caracteres reservados exigem codificação de URL.
+- Preencha `MYSQL_DATABASE`, `MYSQL_USER` e `MYSQL_PASSWORD` com o mesmo banco, usuário e senha da aplicação em `DATABASE_URL`. Use outra senha para `MYSQL_ROOT_PASSWORD`.
 - `PRIVACY_NOTICE_VERSION` e `PRIVACY_NOTICE_TEXT`: versão e texto do aviso institucional aprovado. Valores com `$` ou `#` devem ficar entre aspas simples no arquivo de ambiente para preservar o conteúdo literal.
 - `APP_IMAGE_TAG`: identificador da publicação, por exemplo `release-2026-10-30`. Use uma tag diferente em cada publicação para preservar as imagens anteriores.
 
@@ -27,37 +27,26 @@ O Compose recusa valores obrigatórios vazios. `APP_ENV=production` é definido 
 
 As variáveis `MYSQL_*` inicializam somente um volume vazio. Alterá-las no arquivo não muda senhas nem renomeia um banco existente. Nunca publique o conteúdo de `.env.production` nem a saída de `docker compose config` sem `--quiet`: ela pode conter credenciais.
 
-Para **MySQL externo**, peça uma base vazia no MySQL 8.4 e use um endereço acessível pelos containers na rede privada. Use `PROD_DB=external` em todos os comandos `make prod-*`. O usuário de migração precisa criar tabelas, índices, chaves estrangeiras e gatilhos no banco. Se houver log binário, confirme com o administrador do MySQL como autorizar a criação dos gatilhos; o MySQL do Compose já usa `log_bin_trust_function_creators=ON`. [Documentação do MySQL sobre gatilhos e log binário](https://dev.mysql.com/doc/refman/8.4/en/stored-programs-logging.html).
-
 Se usar contas separadas, configure `MIGRATION_DATABASE_URL` com a conta de migração, apontando para o mesmo banco. A conta da API deve ter `SELECT`, `INSERT`, `UPDATE` e `DELETE` no banco do quiz e nenhuma permissão de DDL. Assim ela não pode executar `TRUNCATE`, operação que não aciona gatilhos de linha no MySQL. Mantenha ativa a conta que criou os gatilhos, pois eles são executados com as permissões dessa conta.
 
 A revisão inicial `0001_mysql` instala o esquema e o catálogo em uma base nova. Se houver participações ou contas em um PostgreSQL antigo, preserve o banco e o backup originais: a migração do esquema não copia esses dados. Nesse caso, planeje e valide a transferência em uma base de ensaio antes de apontar a API para o MySQL. O volume MySQL do Compose é separado do volume antigo.
 
 ## Primeira inicialização
 
-Para o MySQL do Compose:
-
 ```bash
 make prod-up
 make prod-admin
 ```
 
-Para um MySQL já fornecido pela produção:
-
-```bash
-make prod-up PROD_DB=external
-make prod-admin PROD_DB=external
-```
-
-`prod-up` constrói as imagens, aguarda o banco local se estiver no Compose, aplica `alembic upgrade head` em um container temporário e só então inicia a API. Se a migração falhar, a API nova não inicia. O MySQL confirma operações de DDL separadamente; uma primeira migração interrompida pode deixar tabelas sem a revisão registrada. Confira os logs e use uma base nova para repetir a instalação inicial se a anterior ainda não contém dados. Depois que a API estiver saudável, o servidor web é iniciado. O comando aguarda os serviços, mas a emissão do certificado público ainda depende de DNS e acesso externo ao servidor.
+`prod-up` constrói as imagens, aguarda o MySQL ficar pronto e aplica `alembic upgrade head` antes de iniciar a API. Se a migração falhar, a API nova não inicia. O MySQL confirma operações de DDL separadamente, então uma primeira migração interrompida pode deixar tabelas sem a revisão registrada. Confira os logs e use uma base nova para repetir a instalação inicial se a anterior ainda não contém dados. Depois que a API estiver saudável, o servidor web é iniciado. O comando aguarda os serviços, mas a emissão do certificado público ainda depende de DNS e acesso externo ao servidor.
 
 `prod-admin` solicita nome, e-mail e senha em terminal interativo. Não existe administrador padrão. Para redefinir uma senha:
 
 ```bash
-docker compose --env-file .env.production -f compose.production.yaml -f compose.production.mysql.yaml exec api /app/.venv/bin/python -m app.admin reset-password
+docker compose --env-file .env.production -f compose.production.yaml exec api /app/.venv/bin/python -m app.admin reset-password
 ```
 
-Ao usar MySQL externo, retire `-f compose.production.mysql.yaml` dos comandos Docker Compose. Abra `https://SEU_DOMINIO/admin` para acompanhar as participações. O catálogo fixo de 74 afirmativas e 9 cursos é instalado automaticamente pelas migrações; não existe publicação de versões. O aviso institucional continua obrigatório. As migrações não criam usuários.
+Abra `https://SEU_DOMINIO/admin` para acompanhar as participações. O catálogo fixo de 74 afirmativas e 9 cursos é instalado automaticamente pelas migrações. O aviso institucional continua obrigatório. As migrações não criam usuários.
 
 Verifique os endpoints no domínio publicado:
 
@@ -82,7 +71,7 @@ Para atualizar, faça backup, revise as migrações, obtenha o código da versã
 
 ```bash
 make prod-build
-docker compose --env-file .env.production -f compose.production.yaml -f compose.production.mysql.yaml stop frontend api
+docker compose --env-file .env.production -f compose.production.yaml stop frontend api
 make prod-up
 ```
 
@@ -94,23 +83,23 @@ Os logs Docker têm rotação e a API não grava logs de acesso com parâmetros 
 
 ## Backup e restauração
 
-Crie um backup antes de cada atualização e periodicamente durante a operação. Para um MySQL externo, use o procedimento do provedor e confirme que o backup inclui dados, esquema e gatilhos. Para o MySQL do Compose:
+Crie um backup antes de cada atualização e periodicamente durante a operação.
 
 ```bash
 mkdir -p backups
 chmod 700 backups
 umask 077
-docker compose --env-file .env.production -f compose.production.yaml -f compose.production.mysql.yaml exec -T db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysqldump -u "$MYSQL_USER" --single-transaction --no-tablespaces --set-gtid-purged=OFF --triggers "$MYSQL_DATABASE"' > backups/quiz.sql
+docker compose --env-file .env.production -f compose.production.yaml exec -T db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysqldump -u "$MYSQL_USER" --single-transaction --no-tablespaces --set-gtid-purged=OFF --triggers "$MYSQL_DATABASE"' > backups/quiz.sql
 ```
 
 Use um nome diferente para cada backup e confira se o comando terminou com sucesso. A pasta `backups/` é ignorada pelo Git. Os arquivos contêm dados pessoais: restrinja o acesso e mantenha uma cópia protegida fora do servidor. Preserve também o volume `caddy_data`.
 
-Teste a restauração em uma base separada. No MySQL do Compose, por exemplo:
+Use uma base separada para testar a restauração.
 
 ```bash
-docker compose --env-file .env.production -f compose.production.yaml -f compose.production.mysql.yaml exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root -e "CREATE DATABASE iseday_restore_check CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin"'
-docker compose --env-file .env.production -f compose.production.yaml -f compose.production.mysql.yaml exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root iseday_restore_check' < backups/quiz.sql
-docker compose --env-file .env.production -f compose.production.yaml -f compose.production.mysql.yaml exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root iseday_restore_check -e "SELECT COUNT(*) FROM participations; SHOW TRIGGERS"'
+docker compose --env-file .env.production -f compose.production.yaml exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root -e "CREATE DATABASE iseday_restore_check CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin"'
+docker compose --env-file .env.production -f compose.production.yaml exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root iseday_restore_check' < backups/quiz.sql
+docker compose --env-file .env.production -f compose.production.yaml exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root iseday_restore_check -e "SELECT COUNT(*) FROM participations; SHOW TRIGGERS"'
 ```
 
 Em uma recuperação real, interrompa o tráfego, restaure em uma base nova e garanta que a conta que define os gatilhos existe e tem acesso à base restaurada. Valide uma submissão e uma confirmação nessa base antes de apontar a API para ela e reabrir o tráfego.
@@ -134,7 +123,7 @@ O script cria um projeto exclusivo, senha aleatória, banco `iseday_production_t
 Para um ensaio manual separado, preencha outro arquivo de ambiente com dados fictícios, use `SITE_ADDRESS=localhost`, `HTTP_BIND_ADDRESS=127.0.0.1`, `HTTP_PORT=8080` e `HTTPS_PORT=8443`, e atribua outro nome de projeto:
 
 ```bash
-docker compose --project-name iseday-production-rehearsal --env-file /CAMINHO/ensaio.env -f compose.production.yaml -f compose.production.mysql.yaml up --build --detach --wait
+docker compose --project-name iseday-production-rehearsal --env-file /CAMINHO/ensaio.env -f compose.production.yaml up --build --detach --wait
 ```
 
 Abra diretamente `https://localhost:8443`; o redirecionamento HTTP automático usa a porta HTTPS padrão, não a porta externa alternativa desse ensaio. O navegador exibirá aviso até que você confie na CA local do Caddy. Não use HTTP para contornar esse aviso: a sessão de produção depende de cookies seguros.

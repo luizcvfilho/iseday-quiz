@@ -6,7 +6,7 @@ cd "$PROJECT_ROOT"
 npm --prefix frontend run browser:check
 test_dir="$(mktemp -d)"
 project="iseday-production-test-$(date +%s)-$$"
-compose=(docker compose --project-name "$project" --env-file "$test_dir/production.env" -f compose.production.yaml -f compose.production.mysql.yaml)
+compose=(docker compose --project-name "$project" --env-file "$test_dir/production.env" -f compose.production.yaml)
 cleanup() {
   status=$?
   trap - EXIT
