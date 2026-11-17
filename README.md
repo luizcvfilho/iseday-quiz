@@ -4,6 +4,8 @@ Quiz de afinidades: React + TypeScript + Vite, FastAPI e MySQL.
 
 Para produção, consulte [PRODUCTION.md](PRODUCTION.md): imagens sem servidor de desenvolvimento, HTTPS, migrações, administração, backup e ensaio com banco descartável. Os comandos de desenvolvimento abaixo continuam independentes.
 
+A implantação de produção baixa uma versão do repositório público durante a construção das imagens. O servidor precisa somente de Docker com Compose e dos arquivos de implantação, sem Git, Python, Node.js ou Make. Configure `CODE_VERSION` e as variáveis de execução em `.env.production`, conforme o guia. Para gerar o pacote de entrega a partir deste checkout, execute `make package-production` ou `./scripts/package-production.sh` (com `zip` disponível na máquina que gera o pacote); o arquivo será criado em `dist/iseday-quiz-deploy.zip`.
+
 ## Pré-requisitos
 
 - **Node.js 24** com npm (versão registrada em `.nvmrc`).

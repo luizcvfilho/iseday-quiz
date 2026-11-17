@@ -1,8 +1,18 @@
 name: iseday-quiz-production
 
+x-build: &build
+  context: .
+  dockerfile: Dockerfile.production
+  args:
+    APP_REPOSITORY: ${APP_REPOSITORY:-luizcvfilho/iseday-quiz}
+    CODE_VERSION: ${CODE_VERSION:-}
+    SOURCE_MODE: ${SOURCE_MODE:-remote}
+
 x-api: &api
   image: iseday-quiz-production-api:${APP_IMAGE_TAG:-latest}
-  build: ./backend
+  build:
+    <<: *build
+    target: api
   environment: &api-environment
     APP_ENV: production
     DATABASE_URL: ${DATABASE_URL:?Defina DATABASE_URL em .env.production}
@@ -90,8 +100,8 @@ services:
   frontend:
     image: iseday-quiz-production-frontend:${APP_IMAGE_TAG:-latest}
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.production
+      <<: *build
+      target: frontend
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Defina o domínio ou localhost para ensaio local}

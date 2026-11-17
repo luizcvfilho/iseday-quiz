@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help env setup setup-browser setup-browser-deps hooks run up down logs db dev migrate check check-all check-db check-production prod-env prod-build prod-up prod-down prod-logs prod-admin
+.PHONY: help env setup setup-browser setup-browser-deps hooks run up down logs db dev migrate check check-all check-db check-production package-production prod-env prod-build prod-up prod-down prod-logs prod-admin
 
 PROD_ENV_FILE ?= .env.production
 PROD_COMPOSE = docker compose --env-file "$(PROD_ENV_FILE)" -f compose.production.yaml
@@ -21,6 +21,7 @@ help:
 		'make check-all Executa todas as etapas do pre-commit, sem o ensaio de produção.' \
 		'make check-db  Executa os testes de integração MySQL.' \
 		'make check-production Testa produção com HTTPS e banco descartável.' \
+		'make package-production Gera o ZIP de implantação sem código ou segredos.' \
 		'make prod-build Constrói as imagens de produção.' \
 		'make prod-up    Inicia produção e aplica migrações antes da API.' \
 		'make prod-down  Encerra produção, preservando os dados.' \
@@ -73,6 +74,9 @@ check-db:
 
 check-production:
 	./scripts/check-production.sh
+
+package-production:
+	./scripts/package-production.sh
 
 prod-env:
 	@test -f "$(PROD_ENV_FILE)" || { printf '%s\n' 'Copie .env.production.example para $(PROD_ENV_FILE) e preencha os valores. Consulte PRODUCTION.md.'; exit 1; }

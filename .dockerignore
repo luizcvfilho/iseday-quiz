@@ -1,0 +1,22 @@
+# Somente o código necessário ao modo local de construção pode entrar no contexto.
+*
+!Dockerfile.production
+!backend/
+!backend/**
+!frontend/
+!frontend/**
+
+**/.env
+**/.env.*
+**/.git
+**/.aws
+**/.codex
+**/.agents
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/test-results
+**/playwright-report

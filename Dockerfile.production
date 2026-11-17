@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1
+
+# O modo local serve ao ensaio/CI; a implantação baixa o código público por padrão.
+ARG SOURCE_MODE=remote
+
+FROM debian:bookworm-slim AS source-remote
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+ARG APP_REPOSITORY=luizcvfilho/iseday-quiz
+ARG CODE_VERSION
+WORKDIR /src
+RUN : "${CODE_VERSION:?Defina CODE_VERSION com o commit ou a tag da publicação}" \
+    && curl --fail --silent --show-error --location --retry 3 \
+        --output /tmp/source.tar.gz \
+        "https://github.com/${APP_REPOSITORY}/archive/${CODE_VERSION}.tar.gz" \
+    && tar -xzf /tmp/source.tar.gz --strip-components=1 --no-same-owner \
+    && rm /tmp/source.tar.gz \
+    && test -f backend/uv.lock \
+    && test -f frontend/package-lock.json
+
+FROM scratch AS source-local
+COPY backend/ /src/backend/
+COPY frontend/ /src/frontend/
+
+FROM source-${SOURCE_MODE} AS source
+
+FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
+FROM python:3.13-slim AS api
+COPY --from=uv /uv /uvx /usr/local/bin/
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+COPY --from=source /src/backend/pyproject.toml /src/backend/uv.lock ./
+RUN uv sync --frozen --no-dev
+COPY --from=source /src/backend/app ./app
+COPY --from=source /src/backend/catalog ./catalog
+COPY --from=source /src/backend/alembic.ini ./
+COPY --from=source /src/backend/migrations ./migrations
+RUN useradd --create-home --uid 10001 app && chown -R app:app /app
+USER app
+EXPOSE 8000
+CMD ["/app/.venv/bin/uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+
+FROM node:24-bookworm-slim AS frontend-build
+WORKDIR /app
+COPY --from=source /src/frontend/package.json /src/frontend/package-lock.json ./
+RUN npm ci
+COPY --from=source /src/frontend/ ./
+RUN npm run build
+
+FROM caddy:2-alpine AS frontend
+COPY --from=source /src/frontend/Caddyfile /etc/caddy/Caddyfile
+COPY --from=frontend-build /app/dist /srv
+EXPOSE 80 443
